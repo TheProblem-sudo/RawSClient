@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RawS Client (Mobile Friendly)
 // @namespace    https://www.clutcher.io/
-// @version      3.4.2
+// @version      3.5.0
 // @description  Compact per-weapon gun wraps, knife models/wraps & Silent Aim for Clutcher.io with Mobile Toggle
 // @match        https://www.clutcher.io/*
 // @match        https://clutcher.io/*
@@ -64,6 +64,7 @@
     silentCircleColor: '#ff3b4a', silentCircleOpacity: 85, silentCircleWidth: 1.25,
     skinChanger: true, skinKnifeModel: 'native', skinKnifeFinish: 'native',
     gunFinishes: {},
+    perfSkinScan: true, perfSkinInterval: 150, perfFovRefresh: true,
     mobileBtnX: 20, mobileBtnY: 100
   };
 
@@ -86,6 +87,8 @@
   
   let lastObservedWeapon = null;
   let trackedViewmodelScene = null;
+  let lastSkinScanAt = 0;
+  let lastFovRenderAt = 0;
 
   function loadTextureFile(file, type = 'knife', gunId = '') {
     return new Promise((resolve, reject) => {
@@ -207,6 +210,9 @@
     if (!canvas) return;
     const bounds = canvas.getBoundingClientRect();
     if (bounds.width <= 0 || bounds.height <= 0) return;
+    const now = performance.now();
+    if (cfg.perfFovRefresh && now - lastFovRenderAt < 100) return;
+    lastFovRenderAt = now;
 
     overlay.style.left = `${bounds.left}px`;
     overlay.style.top = `${bounds.top}px`;
@@ -435,10 +441,16 @@
 
     if (!cfg.skinChanger || !current) {
       restoreViewmodelMaterials();
+      lastSkinScanAt = 0;
       return;
     }
 
-    updateWeaponViewmodelTexture(g, current);
+    const now = performance.now();
+    const interval = Math.max(50, Math.min(1000, Number(cfg.perfSkinInterval) || 150));
+    if (!cfg.perfSkinScan || now - lastSkinScanAt >= interval) {
+      lastSkinScanAt = now;
+      updateWeaponViewmodelTexture(g, current);
+    }
   }
 
   function mainLoop() {
@@ -456,7 +468,7 @@
   // =====================================================
   // INTERFEJS UŻYTKOWNIKA (UI)
   // =====================================================
-  const tabs = ['Skins', 'Silent Aim', 'Danger'];
+  const tabs = ['Skins', 'Performance', 'Silent Aim', 'Danger'];
   const skinSubTabs = [
     { id: 'Models', label: 'Knife Models' },
     { id: 'Textures', label: 'Knife Wraps' },
@@ -519,7 +531,15 @@
     pageBody = elem('div', cfg.tab === 'Skins' ? '' : 'panel-grid');
     page.append(elem('h2', '', cfg.tab), pageBody);
 
-    if (cfg.tab === 'Silent Aim') {
+    if (cfg.tab === 'Performance') {
+      const p = section('Optymalizacja wydajności', 'Bezpieczne optymalizacje klienta. Nie wyłączają renderowania przeciwników ani elementów mapy.');
+      check(p, 'Ogranicz skanowanie meshy broni (mniej pracy CPU)', 'perfSkinScan');
+      rangeField(p, 'Interwał skanowania broni', 'perfSkinInterval', 50, 1000, 25, ' ms');
+      check(p, 'Ogranicz odświeżanie kółka FOV do 10 FPS', 'perfFovRefresh');
+
+      const note = elem('p', 'desc', 'Frustum culling jest już standardowo obsługiwany przez Three.js. Nie dokładamy drugiego, ryzykownego cullingu, który mógłby ukrywać przeciwników. Distance/occlusion culling wymaga jeszcze rozpoznania obiektów sceny gry.');
+      p.append(note);
+    } else if (cfg.tab === 'Silent Aim') {
       const s = section('Silent Aim Configuration', 'Automatyczne trafianie w głowę w obrębie FOV.');
       check(s, 'Włącz Silent Aim', 'silentAim');
       check(s, 'Pokaż okrąg FOV', 'silentCircle');
@@ -611,7 +631,10 @@
           GAME_GUNS.forEach(gun => {
             const currentSkin = cfg.gunFinishes[gun.id] || 'native';
             const skinLabel = currentSkin === 'native' ? 'Domyślny' : titlecase(currentSkin);
-            const tile = elem('div', 'tile gun-tile', `<strong>${gun.name}</strong><span>[${skinLabel}]</span>`);
+            const tile = elem('div', 'tile gun-tile');
+            const gunTitle = elem('strong', '', gun.name);
+            const gunSkin = elem('span', '', `[${skinLabel}]`);
+            tile.append(gunTitle, gunSkin);
             tile.onclick = () => { cfg.selectedGun = gun.id; save(); renderPage(); };
             grid.append(tile);
           });
