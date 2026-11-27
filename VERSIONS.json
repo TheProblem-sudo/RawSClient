@@ -1,30 +1,46 @@
 {
-  "loaderVersion": "2.2.0",
+  "loaderVersion": "2.3.0",
   "loaderFile": "Loader",
   "builds": {
     "PC": {
       "previous": {
         "file": "PREVVERSION",
         "version": "3.5.0",
-        "build": "PC Previous"
+        "build": "PC Previous",
+        "sha256": "14876559741e9228320b64e69408085d43dd4f6fcc49862e3335a8860ff517d6"
       },
       "newest": {
         "file": "NEWESTVERSION",
         "version": "6.0.0",
-        "build": "PC Newest"
+        "build": "PC Newest",
+        "sha256": "6fbcd56b5cbf49026807f86fb8eb7c9fbea6c4ed2396865d438a07a3cc2374e4"
       }
     },
     "Mobile": {
       "previous": {
         "file": "PREVVERSIONMOBILE",
         "version": "3.5.0-mobile",
-        "build": "Mobile Previous"
+        "build": "Mobile Previous",
+        "sha256": "1bdf6b159c6e28b04f8959e69c169bc44830e8ae74df0a216dc569ec794d0dc5"
       },
       "newest": {
         "file": "NEWESTVERSIONMOBILE",
         "version": "6.0.0-mobile",
-        "build": "Mobile Newest"
+        "build": "Mobile Newest",
+        "sha256": "a34114b65161614a5012d1983cdabf18da4f93735641146fdb3522e9580c56e6"
       }
     }
-  }
+  },
+  "changelog": [
+    {
+      "version": "2.3.0",
+      "date": "2026-11-28",
+      "changes": [
+        "Remembered device and build selection",
+        "Loading stages and progress indicator",
+        "SHA-256 integrity verification for downloaded builds",
+        "Built-in changelog panel"
+      ]
+    }
+  ]
 }
