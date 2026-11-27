@@ -1,0 +1,3047 @@
+// ==UserScript==
+// @name         RawSClient
+// @namespace    https://www.clutcher.io/
+// @version      6.0.0
+// @description  RawS Client - mobile-friendly neon green interface.
+// @icon         https://i.ibb.co/2YnYg7Ps/aasaf.png
+// @match        https://www.clutcher.io/*
+// @match        https://clutcher.io/*
+// @match        file:///*/Clutcher-Offline.html
+// @run-at       document-start
+// @grant        none
+// ==/UserScript==
+
+(() => {
+  'use strict';
+
+  if (window.__rawsClientGUI) return;
+  window.__rawsClientGUI = true;
+
+  // Character rig property changed in the October game bundle.
+  const characterAgent = entity => entity?.kx7Agent || entity?.cs2Agent;
+  const agentBoneCaches=new WeakMap();
+  const normalizedAgentBones=agent=>{
+    const bones=agent?.bones;
+    if (!bones) return new Map();
+    let cached=agentBoneCaches.get(agent);
+    if (!cached||cached.bones!==bones) {
+      cached={bones,normalized:new Map(Object.entries(bones).map(
+        ([name,bone])=>[name.toLowerCase(),bone]))};
+      agentBoneCaches.set(agent,cached);
+    }
+    return cached.normalized;
+  };
+  const characterEntities = g => {
+    const entities = typeof g?.allEntities === 'function' ? [...g.allEntities()] :
+      (Array.isArray(g?.botMgr?.bots) ? g.botMgr.bots : Object.values(g?.botMgr?.bots || {}));
+    return entities.filter(entity => entity && entity !== g?.player &&
+      (entity.team === 'T' || entity.team === 'CT'));
+  };
+
+  const KEY = 'clutcher.darkgui.heldskin.v1';
+  const SKIN_KNIFE_MODELS = [
+    'knife_bayonet','knife_bowie','knife_butterfly','knife_canis','knife_cord',
+    'knife_css','knife_falchion','knife_flip','knife_gut','knife_karambit',
+    'knife_kukri','knife_m9','knife_navaja','knife_nomad','knife_push',
+    'knife_skeleton','knife_stiletto','knife_huntsman','knife_talon','knife_ursus'
+  ];
+  const SKIN_GLOVE_MODELS = [
+    'handwrap','motorcycle','slick','specialist','sporty','bloodhound','brokenfang','hydra'
+  ];
+  const SKIN_FIREARM_IDS = [
+    'glock','usps','p2000','dualies','p250','fiveseven','tec9','cz75','deagle','r8',
+    'mac10','mp9','mp7','mp5sd','ump45','p90','bizon','nova','xm1014','sawedoff',
+    'mag7','m249','negev','galil','famas','ak47','m4a4','m4a1s','sg553','aug',
+    'ssg08','awp','g3sg1','scar20'
+  ];
+
+  const UI_ACCENT = '#39ff14';
+  const defaults = {
+    x: null, y: null, tab: 'Visuals',
+    espShowTeammates: false,
+    boxESP: false, cornerBoxESP: false, boxFill: false, boxFillOpacity: 12,
+    boxVisibleColor: '#39ff14', boxHiddenColor: '#1d7f0b',
+    boxTeamColor: '#3d8bff', boxFillColor: '#39ff14',
+    headDotESP: false, headDotSize: 3,
+    espMaxDistance: 0, espOpacity: 100, boxThickness: 2,
+    espCrosshairLines: false,
+    espEnemyColor: '#39ff14', espTeamColor: '#3d8bff',
+    silentAim: false, silentFov: 120, silentCircle: true,
+    triggerDelay: false, triggerDelayMs: 80,
+    silentCircleColor: '#39ff14', silentCircleOpacity: 85, silentCircleWidth: 1.25,
+    crosshairEnabled: false, crosshairColor: '#f5f5f8',
+    crosshairSize: 8, crosshairGap: 4, crosshairWidth: 2,
+    crosshairDot: false, crosshairDotSize: 2, crosshairOutline: false,
+    autoBhop: false, superBhop: false, superBhopSpeedPercent: 250,
+    autoStrafe: false, strafeMode: 'wasd',
+    bhopNoStamina: false, autoLandingHop: false,
+    strafeCustomSpeed: false, strafeSpeedPercent: 100, rageSpeedPercent: 100,
+    rageBot: false, rageFullMapWallbang: false,
+    rageDamageBoost: false, rageDamagePercent: 150,
+    rageMinDamage: 1,
+    noSpread: false, noRecoil: false, infiniteAmmo: false, lethalShots: false,
+    triggerBot: false, triggerRadius: 8,
+    autoReload: false, autoReloadThreshold: 0,
+    rageAutoFire: true, rageFov: 180,
+    fastPlant: false, fastDefuse: false, infiniteMoney: false,
+    buyAnywhere: false, buyAnytime: false,
+    skinChanger: false, skinCurrentMode: 'native', skinEditorTarget: 'knife',
+    skinKnifeModel: 'native', skinGloveModel: 'native',
+    skinKnifeFinish: 'native', skinKnifeTextureUrl: '',
+    skinWeaponFinish: 'native', skinWeaponTextureUrl: '',
+    skinPerWeaponTextures: false, skinWeaponProfiles: {},
+    skinProfileWeapon: 'awp', skinProfileFinish: 'fade', skinProfileUrl: '',
+    skinBareHands: false,
+    gunModifierEnabled: false, gunModifierProfiles: {}, gunEditorWeapon: 'awp',
+    gunEditorX: 0, gunEditorY: 0, gunEditorZ: 0,
+    gunEditorDamage: 100, gunEditorSpread: 100, gunEditorRecoil: 100,
+    gunEditorFireRate: 100, gunEditorPenetration: 100,
+    infiniteCredits: false, economyHud: false,
+    autoBuyEnabled: false, autoBuyPreset: 'full', autoBuyArmor: true,
+    autoBuyKit: false, autoBuyGrenades: true,
+    autoBuyFlash: 1, autoBuyHE: 1, autoBuySmoke: 1,
+  };
+  const colorKeys = new Set([
+    'espEnemyColor',
+    'espTeamColor',
+    'silentCircleColor', 'crosshairColor',
+    'boxVisibleColor','boxHiddenColor','boxTeamColor','boxFillColor'
+  ]);
+
+  let saved = {};
+  try {
+    saved = JSON.parse(localStorage.getItem(KEY) || '{}');
+  } catch {}
+
+  const cfg = Object.fromEntries(Object.keys(defaults).map(key => {
+    const fallback = defaults[key];
+    const value = saved[key];
+    const validPosition = (key === 'x' || key === 'y') &&
+      (value === null || (typeof value === 'number' && Number.isFinite(value)));
+    const validValue = value != null && typeof value === typeof fallback &&
+      (typeof value !== 'number' || Number.isFinite(value)) &&
+      (!colorKeys.has(key) || /^#[0-9a-f]{6}$/i.test(value)) &&
+      (!['skinWeaponProfiles','gunModifierProfiles'].includes(key)||!Array.isArray(value));
+    return [key, validPosition || validValue ? value : fallback];
+  }));
+  const removedFeatureFlags = ["vmChams","gunModifierEnabled"];
+  for (const key of removedFeatureFlags) if (key in cfg) cfg[key] = false;
+  const tabs = ['Legit','Rage','Visuals','Movement','Misc','Skins','Settings'];
+
+  if (!tabs.includes(cfg.tab)) cfg.tab = 'Visuals';
+
+  const save = () => {
+    try {
+      localStorage.setItem(KEY, JSON.stringify(cfg));
+    } catch {}
+  };
+
+  const configKeys = Object.keys(defaults).filter(key =>
+    !['x','y','tab'].includes(key)
+  );
+
+  const configEnums = {
+    tab: tabs, strafeMode: ['wasd','legit','rage'],
+    funEmote: ['flashed','flashed_crouch','knife_swing','knife_stab',
+      'throw_underhand','throw_overhand','plant_crouch','death_chest_a',
+      'death_gut_a','breathing'],
+    funMapPreset: ['flat','arena','sky','parkour','pillars','custom'],
+    gunEditorWeapon: SKIN_FIREARM_IDS,
+    skinCurrentMode: ['native','default'], skinEditorTarget: ['knife','global','profile'],
+    skinKnifeModel: ['native','default',...SKIN_KNIFE_MODELS],
+    skinGloveModel: ['native','default',...SKIN_GLOVE_MODELS],
+    skinKnifeFinish: ['native','crimson','emerald','sapphire','gold','carbon',
+      'fade','neon','ice','obsidian','tiger','damascus','digital','galaxy',
+      'toxic','lava','arctic','sunset','ruby','amethyst','cobalt','jade',
+      'pearl','holographic','circuit','woodland','desert','ocean','bloodmoon',
+      'monochrome','lightning','graffiti','checker','rainbow','custom'],
+    skinWeaponFinish: ['native','crimson','emerald','sapphire','gold','carbon',
+      'fade','neon','ice','obsidian','tiger','damascus','digital','galaxy',
+      'toxic','lava','arctic','sunset','ruby','amethyst','cobalt','jade',
+      'pearl','holographic','circuit','woodland','desert','ocean','bloodmoon',
+      'monochrome','lightning','graffiti','checker','rainbow','custom'],
+    skinProfileWeapon: SKIN_FIREARM_IDS,
+    skinProfileFinish: ['native','crimson','emerald','sapphire','gold','carbon',
+      'fade','neon','ice','obsidian','tiger','damascus','digital','galaxy',
+      'toxic','lava','arctic','sunset','ruby','amethyst','cobalt','jade',
+      'pearl','holographic','circuit','woodland','desert','ocean','bloodmoon',
+      'monochrome','lightning','graffiti','checker','rainbow','custom'],
+    autoBuyPreset: ['off','full','rifle','smg','sniper','pistol','armor'],
+  };
+  const configRanges = {
+    silentFov:[20,500],
+    triggerDelayMs:[0,500],
+    triggerRadius:[2,40], autoReloadThreshold:[0,15],
+    superBhopSpeedPercent:[100,500],
+    strafeSpeedPercent:[50,1000], rageSpeedPercent:[50,1000],
+    rageFov:[1,180],
+    silentCircleOpacity:[10,100], silentCircleWidth:[0.5,5],
+    crosshairSize:[2,30], crosshairGap:[0,20], crosshairWidth:[1,6],
+    crosshairDotSize:[1,6],
+    boxFillOpacity:[1,50], headDotSize:[1,8],
+    espMaxDistance:[0,300], espOpacity:[10,100], boxThickness:[0.5,6],
+    gunEditorX:[-5,5],gunEditorY:[-5,5],gunEditorZ:[-5,5],
+    gunEditorDamage:[0,1000],gunEditorSpread:[0,500],gunEditorRecoil:[0,500],
+    gunEditorFireRate:[10,1000],gunEditorPenetration:[0,1000],
+    rageDamagePercent:[10,500], rageMinDamage:[1,200],
+    autoBuyFlash:[0,4], autoBuyHE:[0,4], autoBuySmoke:[0,4]
+  };
+
+  function parseConfig(text) {
+    const data = JSON.parse(text.replace(/^\uFEFF/, ''));
+    if (!data || typeof data !== 'object' || Array.isArray(data)) throw Error('Config must contain a settings object.');
+    if (data.format !== undefined && !['amnesis','silly-v2'].includes(data.format)) throw Error('Unsupported config format.');
+    if (data.version !== undefined && ['amnesis','silly-v2'].includes(data.format) && data.version !== 1) throw Error('Unsupported config version.');
+    const settings = data.settings ?? data;
+    if (!settings || typeof settings !== 'object' || Array.isArray(settings)) throw Error('Missing settings object.');
+    const result = {};
+    for (const key of configKeys) {
+      if (!Object.prototype.hasOwnProperty.call(settings, key)) continue;
+      const value = settings[key];
+      if (key === 'x' || key === 'y') {
+        if (value !== null && (typeof value !== 'number' || !Number.isFinite(value))) throw Error('Invalid ' + key);
+      } else if (typeof value !== typeof defaults[key]) throw Error('Invalid type for ' + key);
+      if (['skinWeaponProfiles','gunModifierProfiles'].includes(key)&&Array.isArray(value))
+        throw Error('Invalid weapon profiles.');
+      if (typeof value === 'number' && !Number.isFinite(value)) throw Error('Invalid number for ' + key);
+      if (configEnums[key] && !configEnums[key].includes(value)) throw Error('Invalid option for ' + key);
+      if (colorKeys.has(key) &&
+          !/^#[0-9a-f]{6}$/i.test(value)) throw Error('Invalid color for ' + key);
+      if (configRanges[key] && (value < configRanges[key][0] || value > configRanges[key][1])) throw Error('Out-of-range value for ' + key);
+      result[key] = value;
+    }
+    if (!Object.keys(result).length) throw Error('No recognized settings found.');
+    return result;
+  }
+
+  function exportConfig() {
+    const settings = Object.fromEntries(configKeys.map(key => [key, cfg[key]]));
+    const blob = new Blob([JSON.stringify({format:'amnesis', version:1, settings}, null, 2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'RawS Client.cfg';
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function configControls() {
+    const panel = section('Configs', 'Import or export module settings and colors as a .cfg file. Imports apply immediately. Missing settings keep their current values.');
+    const message = elem('p', 'note');
+    message.setAttribute('role', 'status');
+    const exportButton = elem('button', 'action', 'Export .cfg');
+    exportButton.onclick = exportConfig;
+    const importButton = elem('button', 'action', 'Import .cfg');
+    const picker = elem('input');
+    picker.type = 'file';
+    picker.accept = '.cfg,application/json';
+    picker.hidden = true;
+    importButton.onclick = () => picker.click();
+    picker.onchange = async () => {
+      const file = picker.files?.[0];
+      if (!file) return;
+      try {
+        if (file.size > 128 * 1024) throw Error('Config exceeds 128 KB.');
+        const settings = parseConfig(await file.text());
+        Object.assign(cfg, settings);
+        save();
+        box.style.setProperty('--accent', UI_ACCENT);
+        renderNav();
+        renderPage();
+        const notice = elem('p', 'note', 'Imported ' + file.name + ' (' + Object.keys(settings).length + ' settings).');
+        notice.setAttribute('role', 'status');
+        page.prepend(notice);
+      } catch (error) {
+        message.textContent = 'Import failed: ' + error.message;
+      } finally { picker.value = ''; }
+    };
+    panel.append(exportButton, importButton, picker, message);
+  }
+
+  const norm = s => String(s || '').toLowerCase().trim().replace(/^weapon_/, '');
+  const titlecase = s => String(s || '').replace(/[_-]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+  const knifeRE = /knife|bayonet|karambit|dagger|falchion|bowie|huntsman|navaja|nomad|paracord|skeleton|stiletto|survival|talon|ursus|kukri/i;
+  const isKnife = s => knifeRE.test(norm(s));
+  let uiOpen = false;
+  let root, box, nav, page, pageBody, sectionList, contextPanel;
+  let lockEl, hadLock = false, drag = null;
+  const activeSectionByTab=new Map();
+
+  // Runtime references for the visual / economy modules.
+  let economyHudEl=null;
+  const INV_KEY='clutcher_inv_v1';
+  const VIRTUAL_CREDITS=999999999;
+  let creditsVirtualized=false, creditsStorageOriginals=null;
+
+  // =====================================================
+
+  // =====================================================
+  // LOCAL SKIN TEXTURE SUPPORT
+  // =====================================================
+  // Only traverse the local first-person viewmodel scene. Never alter
+  // game.scene materials, enemy entities, or shared source materials.
+  function loadTextureFile(file,kind) {
+    return new Promise((resolve,reject)=>{
+      if (!file||file.size>16*1024*1024) return reject(Error('Image must be under 16 MB.'));
+      if (!file.type.startsWith('image/')&&!/\.(png|jpe?g|webp)$/i.test(file.name))
+        return reject(Error('Choose a PNG, JPG, or WebP image.'));
+      const url=URL.createObjectURL(file),image=new Image();
+      image.onload=()=>{
+        URL.revokeObjectURL(url);
+        if(kind==='knife'){uploadedKnifeTextureImage=image;uploadedKnifeTextureName=file.name;}
+        else if(String(kind).startsWith('weapon:'))
+          uploadedWeaponProfileImages.set(String(kind).slice(7),{image,name:file.name});
+        else{uploadedWeaponTextureImage=image;uploadedWeaponTextureName=file.name;}
+        knifeTextureVersion++;resolve(image);
+      };
+      image.onerror=()=>{URL.revokeObjectURL(url);reject(Error('Could not decode image.'));};
+      image.src=url;
+    });
+  }
+
+  function builtInKnifeFinish(name) {
+    if (knifeFinishImages.has(name)) return knifeFinishImages.get(name);
+    const canvas=document.createElement('canvas');canvas.width=canvas.height=512;
+    const c=canvas.getContext('2d');
+    const gradients={
+      crimson:['#170307','#7d0c1b','#ff334d'],emerald:['#02140d','#087846','#5dffb0'],
+      sapphire:['#030b1d','#124fa5','#63bdff'],gold:['#241500','#a76b08','#ffe58a'],
+      fade:['#ff58c8','#745cff','#48d9ff'],ice:['#dffaff','#6bdcff','#ffffff'],
+      obsidian:['#020204','#171022','#5c2d78'],toxic:['#071400','#48c000','#d7ff32'],
+      lava:['#120000','#d62b00','#ffd04d'],arctic:['#071728','#5dbfe8','#eaffff'],
+      sunset:['#301047','#f23f74','#ffbd5b'],galaxy:['#050018','#391b70','#d458ff'],
+      ruby:['#250006','#a00020','#ff6077'],amethyst:['#10001e','#7020a0','#db8cff'],
+      cobalt:['#010d28','#144fbd','#72a8ff'],jade:['#001b13','#098661','#7affc5'],
+      pearl:['#777b86','#fffdf2','#b5c7dd'],holographic:['#ff62b7','#67f5ff','#ceff70','#aa71ff'],
+      ocean:['#001224','#006c8c','#55e7e0'],bloodmoon:['#080000','#6d0000','#ff3b21'],
+      monochrome:['#050505','#777','#f5f5f5'],rainbow:['#ff3434','#ffdf38','#35f079','#34bfff','#984cff','#ff4fc5']
+    };
+    if (name==='carbon') {
+      c.fillStyle='#111';c.fillRect(0,0,512,512);
+      for(let y=0;y<512;y+=32)for(let x=0;x<512;x+=32){
+        c.fillStyle=(x/32+y/32)%2?'#262626':'#090909';c.fillRect(x,y,30,30);
+      }
+    } else if (name==='neon') {
+      c.fillStyle='#020205';c.fillRect(0,0,512,512);
+      c.lineWidth=8;
+      for(let i=-512;i<1024;i+=52){
+        c.strokeStyle=i%104?'#ff1f78':'#21e6ff';c.beginPath();
+        c.moveTo(i,0);c.lineTo(i-512,512);c.stroke();
+      }
+    } else if (name==='tiger') {
+      c.fillStyle='#d96a00';c.fillRect(0,0,512,512);c.strokeStyle='#17100a';c.lineWidth=22;
+      for(let i=-400;i<900;i+=70){c.beginPath();c.moveTo(i,0);c.bezierCurveTo(i+130,150,i-80,350,i+80,512);c.stroke();}
+    } else if (name==='damascus') {
+      c.fillStyle='#59626b';c.fillRect(0,0,512,512);
+      for(let y=0;y<512;y+=12){c.strokeStyle=y%24?'#c7d0d5':'#252b30';c.beginPath();
+        for(let x=0;x<=512;x+=8){const py=y+Math.sin(x/24+y/31)*9;x?c.lineTo(x,py):c.moveTo(x,py);}c.stroke();}
+    } else if (name==='digital') {
+      c.fillStyle='#18231c';c.fillRect(0,0,512,512);
+      let seed=1337;for(let y=0;y<512;y+=16)for(let x=0;x<512;x+=16){
+        seed=(seed*1664525+1013904223)>>>0;c.fillStyle=['#233a2a','#47604a','#75816f','#111915'][seed%4];
+        c.fillRect(x,y,16*(1+(seed>>3)%3),16);
+      }
+    } else if (name==='galaxy') {
+      const gradient=c.createRadialGradient(180,220,10,256,256,430);
+      gradient.addColorStop(0,'#db4fff');gradient.addColorStop(.35,'#442080');gradient.addColorStop(1,'#02000d');
+      c.fillStyle=gradient;c.fillRect(0,0,512,512);
+      let seed=42;for(let i=0;i<180;i++){seed=(seed*1103515245+12345)>>>0;
+        const x=seed%512;seed=(seed*1103515245+12345)>>>0;const y=seed%512;
+        c.fillStyle='#fff';c.globalAlpha=.3+(seed%70)/100;c.fillRect(x,y,1+(seed%3),1+(seed%3));}
+      c.globalAlpha=1;
+    } else if (name==='circuit') {
+      c.fillStyle='#06110d';c.fillRect(0,0,512,512);c.strokeStyle='#28f59a';c.lineWidth=4;
+      for(let y=28;y<512;y+=52){c.beginPath();c.moveTo(0,y);c.lineTo(110,y);
+        c.lineTo(140,y+22);c.lineTo(290,y+22);c.lineTo(320,y);c.lineTo(512,y);c.stroke();}
+      c.fillStyle='#b6ffe2';for(let y=28;y<512;y+=52)for(let x=32;x<512;x+=128)c.fillRect(x,y-5,10,10);
+    } else if (name==='woodland'||name==='desert') {
+      const palette=name==='woodland'?['#10180e','#304126','#596044','#1d2618']:
+        ['#49351f','#96724a','#cfad72','#665037'];
+      c.fillStyle=palette[0];c.fillRect(0,0,512,512);let seed=name==='woodland'?77:91;
+      for(let i=0;i<180;i++){seed=(seed*1664525+1013904223)>>>0;
+        const x=seed%512;seed=(seed*1664525+1013904223)>>>0;const y=seed%512;
+        c.fillStyle=palette[(seed>>5)%palette.length];c.beginPath();
+        c.ellipse(x,y,18+(seed%55),10+((seed>>7)%32),(seed%628)/100,0,Math.PI*2);c.fill();}
+    } else if (name==='lightning') {
+      c.fillStyle='#020817';c.fillRect(0,0,512,512);c.strokeStyle='#8cecff';c.lineWidth=9;
+      c.shadowColor='#30bfff';c.shadowBlur=22;
+      for(let x=40;x<520;x+=105){c.beginPath();c.moveTo(x,0);let px=x;
+        for(let y=0;y<540;y+=55){px+=((x+y)%3-1)*32;c.lineTo(px,y);}c.stroke();}
+      c.shadowBlur=0;
+    } else if (name==='graffiti') {
+      c.fillStyle='#171717';c.fillRect(0,0,512,512);
+      const colors=['#ff275d','#ffe22f','#22e6ff','#8aff42','#a95cff'];
+      c.lineWidth=14;c.lineCap='round';
+      for(let i=0;i<24;i++){c.strokeStyle=colors[i%colors.length];c.beginPath();
+        c.moveTo((i*83)%512,(i*47)%512);c.quadraticCurveTo((i*137)%512,(i*199)%512,(i*239)%512,(i*71)%512);c.stroke();}
+    } else if (name==='checker') {
+      for(let y=0;y<512;y+=48)for(let x=0;x<512;x+=48){
+        c.fillStyle=((x/48+y/48)%2)?'#e6e6e6':'#161616';c.fillRect(x,y,48,48);}
+    } else {
+      const colors=gradients[name]||['#444','#aaa','#fff'];
+      const gradient=c.createLinearGradient(0,512,512,0);
+      colors.forEach((color,index)=>gradient.addColorStop(index/(colors.length-1),color));
+      c.fillStyle=gradient;c.fillRect(0,0,512,512);
+      c.globalAlpha=.18;c.fillStyle='#fff';
+      for(let i=0;i<18;i++)c.fillRect(-200+i*55,0,18,720);
+      c.globalAlpha=1;
+    }
+    knifeFinishImages.set(name,canvas);return canvas;
+  }
+
+  const skinWeaponAliases={usp:'usps',hkp2000:'p2000',elite:'dualies',
+    cz75a:'cz75',revolver:'r8',galilar:'galil'};
+  const normalizeSkinWeapon=id=>skinWeaponAliases[norm(id)]||norm(id);
+
+  function resolveSkinIntent(g) {
+    const weaponId=normalizeSkinWeapon(g?.weapons?.current);
+    const weaponClass=g?.weapons?.def?.()?.class;
+    if(!cfg.skinChanger) return {enabled:false,weaponId,weaponClass};
+    if(weaponClass==='knife'||weaponId==='knife') {
+      const finish=cfg.skinKnifeFinish;
+      return {enabled:finish!=='native',scope:'knife',weaponId,weaponClass,finish,
+        url:String(cfg.skinKnifeTextureUrl||'').trim(),upload:uploadedKnifeTextureImage};
+    }
+    if(!['pistol','rifle','smg','shotgun','sniper','mg'].includes(weaponClass))
+      return {enabled:false,weaponId,weaponClass};
+    const rawProfiles=cfg.skinWeaponProfiles||{};
+    const profile=cfg.skinPerWeaponTextures?
+      (rawProfiles[weaponId]||rawProfiles[g?.weapons?.current]):null;
+    const scope=cfg.skinPerWeaponTextures?'profile':'global';
+    const finish=scope==='profile'?(profile?.finish||'native'):cfg.skinWeaponFinish;
+    const upload=scope==='profile'?uploadedWeaponProfileImages.get(weaponId)?.image:
+      uploadedWeaponTextureImage;
+    const url=scope==='profile'?String(profile?.url||'').trim():
+      String(cfg.skinWeaponTextureUrl||'').trim();
+    return {enabled:finish!=='native',scope,weaponId,weaponClass,finish,url,upload};
+  }
+
+  function resolveSkinIntentImage(intent) {
+    if(!intent?.enabled||intent.finish==='native') return null;
+    if(intent.finish!=='custom') return builtInKnifeFinish(intent.finish);
+    if(intent.upload) return intent.upload;
+    const url=intent.url;
+    if(!url) return null;
+    const knife=intent.scope==='knife';
+    if(knife){
+      if(url!==customKnifeUrl&&!customKnifeLoading){
+        customKnifeUrl=url;customKnifeImage=null;customKnifeLoading=true;
+        const image=new Image();image.crossOrigin='anonymous';
+        image.onload=()=>{if(customKnifeUrl===url){customKnifeImage=image;knifeTextureVersion++;}
+          customKnifeLoading=false;};
+        image.onerror=()=>{if(customKnifeUrl===url)customKnifeLoading=false;};image.src=url;
+      }
+      return customKnifeUrl===url?customKnifeImage:null;
+    }
+    if(url!==customWeaponUrl&&!customWeaponLoading){
+      customWeaponUrl=url;customWeaponImage=null;customWeaponLoading=true;
+      const image=new Image();image.crossOrigin='anonymous';
+      image.onload=()=>{if(customWeaponUrl===url){customWeaponImage=image;knifeTextureVersion++;}
+        customWeaponLoading=false;};
+      image.onerror=()=>{if(customWeaponUrl===url)customWeaponLoading=false;};image.src=url;
+    }
+    return customWeaponUrl===url?customWeaponImage:null;
+  }
+
+  function currentHeldWeaponTextureImage(g) {
+    return resolveSkinIntentImage(resolveSkinIntent(g));
+  }
+
+  function configureSkinTexture(texture) {
+    if (texture) texture.needsUpdate = true;
+  }
+
+    function applySkinMaterialFinish(mat,source) {
+    if (!mat) return;
+    if ('roughness' in mat) mat.roughness = source?.roughness ?? mat.roughness;
+    if ('metalness' in mat) mat.metalness = source?.metalness ?? mat.metalness;
+    if (mat.emissive) {
+      if (source?.emissive) mat.emissive.copy?.(source.emissive);
+      mat.emissiveMap = source?.emissiveMap || null;
+      mat.emissiveIntensity = source?.emissiveIntensity ?? 1;
+    }
+  }
+
+    const skinStateBackups = new Map();
+  const skinLastSignatures = new WeakMap();
+  const skinRecords = new Map();
+  let skinAppliedState = null;
+  const effectiveKnifeModel=()=>cfg.skinKnifeModel;
+  const effectiveGloveModel=()=>cfg.skinBareHands?'default':cfg.skinGloveModel;
+
+  function skinRecord(model) {
+    if (!skinRecords.has(model)) skinRecords.set(model, {
+      id:'amnesis_'+model,name:titlecase(model.replace(/^knife_/,'')),
+      weapon:model,slot:model,kind:'knife',kit:'',vanilla:true,
+      rarity:'gold',wmin:0,wmax:0,phase:'',seed:0
+    });
+    return skinRecords.get(model);
+  }
+
+  function backupSkinState(state) {
+    if (skinStateBackups.has(state)) return;
+    const backup={};
+    for (const key of ['skinOverride','skinItem','shownSkin','shownSet']) {
+      backup[key]={had:Object.prototype.hasOwnProperty.call(state,key),value:state[key]};
+    }
+    skinStateBackups.set(state,backup);
+  }
+
+  function restoreSkinStates() {
+    for (const [state,backup] of skinStateBackups) {
+      for (const [key,data] of Object.entries(backup)) {
+        if (data.had) state[key]=data.value;
+        else delete state[key];
+      }
+    }
+    skinStateBackups.clear();
+    skinAppliedState=null;
+  }
+
+  function installSkinChangerHooks(g) {
+    if (g.__amnesisSkinHook || typeof g._povLoadout!=='function' ||
+        typeof g._ownGloves!=='function') return;
+    const originalPov=g._povLoadout;
+    const originalGloves=g._ownGloves;
+    g._povLoadout=function(entity,...args) {
+      const base=originalPov.call(this,entity,...args);
+      if (!cfg.skinChanger||(entity&&entity!==this.player)||!base) return base;
+      const out={...base,paintOpts:{...(base.paintOpts||{})}};
+      const logical=this.weapons?.current;
+      const knifeModel=effectiveKnifeModel();
+      if (cfg.skinCurrentMode==='default') {
+        delete out.paintOpts.kit;delete out.paintOpts.item;
+      }
+      if (logical==='knife') {
+        if (knifeModel==='default') {
+          out.wid=this.player?.team==='T'?'knife_t':'knife_ct';
+        } else if (SKIN_KNIFE_MODELS.includes(knifeModel)) {
+          out.wid=knifeModel;
+        }
+      }
+      return out;
+    };
+    g._ownGloves=function(...args) {
+      const gloveModel=effectiveGloveModel();
+      if (!cfg.skinChanger||gloveModel==='native') {
+        return originalGloves.apply(this,args);
+      }
+      if (gloveModel==='default') return null;
+      return {model:gloveModel,kit:'',item:{wear:0,seed:0}};
+    };
+    g.__amnesisSkinHook={originalPov,originalGloves};
+  }
+
+  function refreshSkinChanger(g) {
+    g._kx7Weapon=null;g._kx7Paint=null;
+    const current=g.weapons?.current;
+    if (current) g.viewmodel?.setWeapon?.(current);
+    g.syncOwnGloves?.();
+    g.hud?.updateWeapon?.();
+  }
+
+  function updateRuntimeSkinChanger(g) {
+    installSkinChangerHooks(g);
+    const current=g.weapons?.current;
+    const state=current?g.weapons?.state?.(current):null;
+    const knifeModel=effectiveKnifeModel();
+    const gloveModel=effectiveGloveModel();
+    const signature=[cfg.skinChanger,cfg.skinCurrentMode,
+      knifeModel,gloveModel,current].join('|');
+    const needsState=cfg.skinChanger&&
+      (cfg.skinCurrentMode==='default'||
+       (current==='knife'&&SKIN_KNIFE_MODELS.includes(knifeModel)));
+    if (skinLastSignatures.get(g)===signature&&
+        (!needsState||skinAppliedState===state)) return;
+    restoreSkinStates();
+    if (needsState&&state) {
+      backupSkinState(state);
+      if (current==='knife'&&SKIN_KNIFE_MODELS.includes(knifeModel)) {
+        const skin=skinRecord(knifeModel);
+        state.skinOverride=skin;state.skinItem={wear:0,seed:0};
+        state.shownSkin=skin;state.shownSet=true;
+      } else {
+        state.skinOverride='default';state.skinItem=null;
+        state.shownSkin=null;state.shownSet=true;
+      }
+      skinAppliedState=state;
+    }
+    skinLastSignatures.set(g,signature);
+    refreshSkinChanger(g);
+  }
+
+  function updateRuntimeFeatures(g) {
+    updateRuntimeSkinChanger(g);
+  }
+
+  function visualSettingsFrame() {
+    requestAnimationFrame(visualSettingsFrame);
+    const g = window.game;
+    if (!g) return;
+    try {
+      updateRuntimeFeatures(g);
+      updateHeldSkinTexture(g);
+      
+            syncEconomyCredits();
+      updateEconomyHud(g);
+      autoBuyTick(g);
+    }
+    catch (err) { console.warn('[RawS Client Visual Settings]', err); }
+  }
+  requestAnimationFrame(visualSettingsFrame);
+
+  // =====================================================
+  // SILENT AIM
+  // =====================================================
+
+  let hookedGame = null;
+
+  // =====================================================
+  // RAGE BOT / SHOT PATH VALIDATION
+  // =====================================================
+  // Keep the game's native collision/path test for wallbang and damage checks.
+  // Target selection uses one fixed chest point, not custom bone hitboxes.
+  let rageLastTarget = null;
+  let rageHookedWeapons = null;
+  let rageStateGame=null,rageRoundToken=null;
+
+  function rageCombatActive(g,requireInput=true) {
+    if (!g||g.state!=='playing'||g.roundActive!==true||!g.player?.alive||
+        g.frozen||g._joining||document.hidden) return false;
+    if (g.modeCtl&&!['live','planted'].includes(g.modeCtl.state)) return false;
+    if (requireInput&&(uiOpen||!g.input?.locked||g.hud?.pauseMode||
+        g.hud?.buyOpen||g.hud?.howToOpen)) return false;
+    return true;
+  }
+
+  function resetRageTransient() {
+    rageLastTarget=null;
+  }
+
+  function syncRageLifecycle(g) {
+    const token=g?.modeCtl?.roundNum??g?.modeCtl?.round??
+      (g?.roundActive?1:0);
+    if (g!==rageStateGame||token!==rageRoundToken) {
+      resetRageTransient();rageStateGame=g;rageRoundToken=token;
+    }
+    if (!cfg.rageBot||!rageCombatActive(g,false)) resetRageTransient();
+  }
+
+  function forcedFireInput(input) {
+    return new Proxy(input,{get(target,key,receiver) {
+      if (key==='mouse1'||key==='mouse1Pressed') return true;
+      return Reflect.get(target,key,receiver);
+    }});
+  }
+
+  // =====================================================
+  // NATIVE WALLBANG / BREAKABLE PATH TEST
+  // =====================================================
+  // This reproduces main.js fireBullet world-collision rules:
+  //  - bullet mask 2; 4 world penetrations maximum
+  //  - penetration inches = weapon.penetration * 30
+  //  - each material scales max thickness AND remaining damage
+  //  - physics.traceExit uses a 4-inch step, so mirror it exactly
+  //  - triangles stop bullets, though damageable map entities still take damage
+  //  - blocked paths are rejected, including destructible map entities
+  // Copying the material table makes this independent of game bundle minification.
+  const rageMaterialFactors = {
+    "armorflesh": [0.5, 0.3],
+    "asphalt": [0.55, 0.3],
+    "blockbullets": [0.01, 0.001],
+    "brick": [0.47, 0.3],
+    "cardboard": [0.95, 0.99],
+    "carpet": [0.75, 0.5],
+    "chainlink": [0.99, 0.99],
+    "clay": [0.95, 0.6],
+    "computer": [0.4, 0.45],
+    "concrete": [0.5, 0.25],
+    "default": [0.5, 0.5],
+    "dirt": [0.6, 0.3],
+    "flesh": [0.9, 0.5],
+    "foliage": [0.95, 0.5],
+    "fruit": [0.9, 0.5],
+    "glass": [0.99, 0.5],
+    "glassbottle": [0.99, 0.5],
+    "glassfloor": [0.99, 0.5],
+    "gravel": [0.4, 0.5],
+    "ice": [0.75, 0.5],
+    "metal": [0.4, 0.5],
+    "metal_barrel": [0.01, 0.01],
+    "metal_box": [0.5, 0.5],
+    "metal_sand_barrel": [0.01, 0.01],
+    "metaldogtags": [0.4, 0.5],
+    "metalgrate": [0.95, 0.99],
+    "metalpanel": [0.5, 0.45],
+    "metalvehicle": [0.5, 0.5],
+    "metalvent": [0.6, 0.45],
+    "plaster": [0.7, 0.6],
+    "plastic_barrel": [0.7, 0.5],
+    "plastic_box": [0.75, 0.5],
+    "plastic_solid": [0, 0.5],
+    "player_control_clip": [0.5, 1],
+    "porcelain": [0.95, 0.5],
+    "pottery": [0.95, 0.6],
+    "potterylarge": [0.95, 0.6],
+    "quicksand": [0.2, 0.5],
+    "rock": [0.5, 0.25],
+    "rubber": [0.85, 0.5],
+    "sand": [0.3, 0.25],
+    "sheetrock": [0.85, 0.6],
+    "snow": [0.85, 0.5],
+    "solidmetal": [0.27, 0.3],
+    "tile": [0.7, 0.3],
+    "upholstery": [0.75, 0.5],
+    "water": [0.3, 0.5],
+    "watermelon": [0.95, 0.6],
+    "wood": [0.9, 0.6],
+    "wood_basket": [0.9, 0.5],
+    "wood_box": [0.9, 0.5],
+    "wood_crate": [0.9, 0.5],
+    "wood_dense": [0.5, 0.3],
+    "wood_ladder": [0.9, 0.5],
+    "wood_plank": [0.85, 0.5],
+    "wood_solid": [0.8, 0.5],
+  };
+  const rageMaterialAliases = {
+    "crate": "wood_crate",
+    "curb": "concrete",
+    "fabric": "carpet",
+    "paved": "asphalt",
+    "plank": "wood_plank",
+    "plaster2": "plaster",
+    "plastic": "plastic_box",
+    "tarp": "carpet",
+  };
+  const rageMaterialProperties = mat => {
+    const key = String(mat ?? 'default').toLowerCase();
+    return rageMaterialFactors[rageMaterialAliases[key] || key] ||
+      rageMaterialFactors.default;
+  };
+
+  const rageProbeCache=new WeakMap();
+
+  function rageBulletPath(g, origin, p, enemy) {
+    const vx = p.x-origin.x, vy = p.y-origin.y, vz = p.z-origin.z;
+    const dist = Math.hypot(vx,vy,vz);
+    if (!(dist > 0.0001) || !Number.isFinite(dist)) return null;
+    const physics = g.physics;
+    const dx=vx/dist, dy=vy/dist, dz=vz/dist;
+    const weapon=g.weapons?.def?.();
+    if (!weapon) return null;
+
+    if (cfg.rageFullMapWallbang) {
+      let blocked=false;
+      try {
+        const hit=physics?.raycast?.(origin.x,origin.y,origin.z,
+          dx,dy,dz,Math.max(0,dist-.003),2);
+        blocked=!!hit;
+      } catch {}
+      return {mode:blocked?'wallbang':'clear',walls:blocked?1:0,
+        damageScale:1,pathDamage:Number(weapon.dmg)||1,bypassWorld:blocked};
+    }
+
+    const Ctor=g._bulletPath?.constructor;
+    if (typeof Ctor!=='function'||typeof Ctor.prototype?.trace!=='function'||
+        typeof g._hitboxIntervals!=='function') {
+      try {
+        return physics?.lineClear?.(origin.x,origin.y,origin.z,p.x,p.y,p.z)
+          ? {mode:'clear',walls:0,damageScale:1,pathDamage:Number(weapon.dmg)||1}
+          : null;
+      } catch {return null;}
+    }
+
+    let cached=rageProbeCache.get(g);
+    if (!cached||cached.Ctor!==Ctor) {
+      cached={Ctor,probe:new Ctor(physics,g._hitboxIntervals.bind(g))};
+      rageProbeCache.set(g,cached);
+    }
+    const probe=cached.probe;
+    probe.phys=physics;
+    const hadShooter=Object.prototype.hasOwnProperty.call(g,'_bulletShooter');
+    const oldShooter=g._bulletShooter;
+    const range=Math.min(300,Number(weapon.maxRange)||300);
+    try {
+      g._bulletShooter=g.player;
+      g._hbSerial=(g._hbSerial|0)+1;
+      probe.trace(origin.x,origin.y,origin.z,dx,dy,dz,range,weapon);
+    } catch (error) {
+      console.warn('[Rage Bot] native path probe:',error);
+      return null;
+    } finally {
+      if (hadShooter) g._bulletShooter=oldShooter;
+      else delete g._bulletShooter;
+    }
+
+    let solidCount=0,wallCount=0;
+    const end=Number(probe.end)||range;
+    for (let i=0;i<(probe.segs?.length||0);i++) {
+      const seg=probe.segs[i];
+      if (seg.solid) {
+        const boundary=probe.recs?.[seg.b];
+        if (seg.stopped||i===probe.segs.length-1) return null;
+        solidCount++;
+        if (boundary?.b) wallCount++;
+        continue;
+      }
+      if (seg.t1>=end-1e-6) break;
+      const rec=probe.recs?.[seg.b];
+      if (!rec||rec.b||!rec.ent) continue;
+      if (!g.friendlyFire&&rec.ent.team===g.player.team) return null;
+      if (rec.ent===enemy) {
+        const damage=Number(seg.dmg)||0;
+        if (damage<Math.max(1,Number(cfg.rageMinDamage)||1)) return null;
+        return {mode:wallCount?'wallbang':'clear',walls:wallCount,
+          solidCount,pathDamage:damage,
+          damageScale:damage/Math.max(1,Number(weapon.dmg)||1)};
+      }
+    }
+    return null;
+  }
+
+  function rageAimCandidate(g, origin, p, fwd, cosFov, enemy) {
+    if (![p.x,p.y,p.z].every(Number.isFinite)) return null;
+    const dx=p.x-origin.x, dy=p.y-origin.y, dz=p.z-origin.z;
+    const length=Math.hypot(dx,dy,dz);
+    if (length<0.05) return null;
+    const dir={x:dx/length,y:dy/length,z:dz/length};
+    const dot=dir.x*fwd.x+dir.y*fwd.y+dir.z*fwd.z;
+    if (dot < cosFov-1e-7) return null;
+    const path=rageBulletPath(g,origin,p,enemy);
+    if (!path) return null;
+    return {
+      dir,point:p,length,angle:Math.acos(Math.max(-1,Math.min(1,dot))),
+      path
+    };
+  }
+
+  function rageTarget(g, origin) {
+    syncRageLifecycle(g);
+    if (!cfg.rageBot || !rageCombatActive(g,false)) return null;
+    const local=g.player;
+    const pitch=Number(local.pitch), yaw=Number(local.yaw);
+    if (!Number.isFinite(pitch)||!Number.isFinite(yaw)) return null;
+    const cs=Math.cos(pitch);
+    const fwd={x:-Math.sin(yaw)*cs,y:Math.sin(pitch),z:-Math.cos(yaw)*cs};
+    const fov=Math.max(1,Math.min(180,Number(cfg.rageFov)||180));
+    const cosFov=Math.cos(fov*Math.PI/180);
+    const entities=characterEntities(g);
+    let chosen=null, bestKey=null;
+    const betterKey=(a,b)=>!b||a.some((value,index)=>
+      value!==b[index]&&a.slice(0,index).every((v,i)=>v===b[i])&&value<b[index]
+    );
+
+    for (const enemy of entities) {
+      if (!enemy || enemy===local || !enemy.alive ||
+          (local.team!=null && enemy.team===local.team) ||
+          Number(enemy.spawnProt)>0) continue;
+      if (![enemy.x,enemy.y,enemy.z].every(Number.isFinite)) continue;
+
+      const ey=Number(enemy._visY ?? enemy.y);
+      const height=Number(enemy.height)||1.8;
+      const point={x:Number(enemy.x),y:ey+height*.65,z:Number(enemy.z)};
+      const candidate=rageAimCandidate(g,origin,point,fwd,cosFov,enemy);
+      if (!candidate) continue;
+      // Preserve visible-enemy priority for clear paths over wallbang paths.
+      const modeRank={clear:0,wallbang:1}[candidate.path.mode];
+      const key=[modeRank,candidate.angle,candidate.length];
+      if (betterKey(key,bestKey)) {
+        bestKey=key;
+        chosen={enemy,...candidate};
+      }
+    }
+    return chosen;
+  }
+
+  const firearmClasses = new Set(['pistol','rifle','smg','shotgun','sniper','mg']);
+  let triggerTargetSince=0;
+
+  function currentGunModifier(g) {
+    if (!cfg.gunModifierEnabled) return null;
+    const id=g?.weapons?.current;
+    const profile=id?cfg.gunModifierProfiles?.[id]:null;
+    return profile&&typeof profile==='object'?profile:null;
+  }
+
+  function applyWeaponModifiers(weapons) {
+    if (cfg.noRecoil) {
+      const punch = weapons.punch;
+      if (punch) {
+        punch.aimPitch = 0; punch.aimYaw = 0;
+        punch.velPitch = 0; punch.velYaw = 0;
+        punch.viewPitch = 0; punch.viewYaw = 0;
+      }
+      weapons.punchP = 0; weapons.punchY = 0;
+      weapons.shkP = 0; weapons.shkY = 0;
+    }
+    if (cfg.infiniteAmmo) {
+      const def = weapons.def?.();
+      const state = weapons.state?.();
+      if (def && state && firearmClasses.has(def.class)) {
+        if (Number.isFinite(def.mag) && def.mag > 0) state.ammo = def.mag;
+        if (Number.isFinite(def.reserve)) {
+          state.reserve = Math.max(Number(state.reserve) || 0, def.reserve);
+        }
+        weapons._autoReload = null;
+      }
+    }
+  }
+
+  function maybeAutoReload(weapons, game, input) {
+    if (!cfg.autoReload || cfg.infiniteAmmo) return;
+    const def = weapons.def?.();
+    const state = weapons.state?.();
+    if (!def || !state || !firearmClasses.has(def.class)) return;
+    const mag = Number(def.mag);
+    if (!(mag > 1)) return;
+    const threshold = Math.max(0, Math.min(mag - 1,
+      Math.floor(Number(cfg.autoReloadThreshold) || 0)));
+    if (state.ammo > threshold || state.ammo >= mag || !(state.reserve > 0) ||
+        weapons.reloading || weapons.drawT > 0 || weapons.grenadeCooking ||
+        weapons.charging || (weapons._burstLeft || 0) > 0 || game.frozen ||
+        game.time < (weapons.nextFire || 0) || input?.mouse1) return;
+    weapons.startReload?.();
+  }
+
+  function ensureRageFireHook() {
+    const g=window.game, w=g?.weapons;
+    if (!g||!w || typeof w.update!=='function') return;
+    if (w===rageHookedWeapons && w.update.__amnesisRageBot) return;
+    const original=w.update;
+    const wrapper=function(...args) {
+      syncRageLifecycle(g);
+      applyWeaponModifiers(this);
+      const frameInput = args[1] || g.input;
+      maybeAutoReload(this, g, frameInput);
+      const runOriginal = (callArgs=args) => {
+        applyWeaponModifiers(this);
+        try { return original.apply(this,callArgs); }
+        finally { applyWeaponModifiers(this); }
+      };
+      const runForcedFire=()=>{
+        if (frameInput!==g.input) return runOriginal();
+        const forcedArgs=args.slice();forcedArgs[1]=forcedFireInput(frameInput);
+        const pullBefore=this._pull;let completed=false;
+        try {
+          this._pull=true;
+          const result=runOriginal(forcedArgs);completed=true;return result;
+        } finally {if(!completed)this._pull=pullBefore;}
+      };
+      rageLastTarget=null;
+
+      // RAPID FIRE: bypass the game's nextFire/cycleTime cooldown for
+      // firearms only. Retain its native ammo, draw, reload and shot code.
+      // One shot is issued per game update while the fire button is held.
+      const activeRapid = cfg.rapidFire && rageCombatActive(g,true) &&
+        ['pistol', 'rifle', 'smg', 'shotgun', 'sniper', 'mg']
+          .includes(this.def?.()?.class);
+      if (activeRapid) {
+        // Weapons.fire() schedules nextFire after every shot. The next
+        // update clears that scheduled delay, but never creates ammo.
+        this.nextFire = g.time;
+        // Semi-auto guns ordinarily require a fresh mouse press each shot.
+        // Holding fire should keep cycling without synthetic DOM events.
+        if (frameInput?.mouse1 && !this.reloading && !this.charging) {
+          this._pull = true;
+        }
+      }
+
+      let triggerOnTarget=false;
+      if (cfg.triggerBot && (!cfg.rageBot || !cfg.rageAutoFire) &&
+          rageCombatActive(g,true) && frameInput===g.input) {
+        const def = this.def?.();
+        const ammo = this.state?.();
+        const p = g.player;
+        const origin = {x:p.x,y:p.y+Number(p.eyeH??1.55)-(p._stepLift||0),z:p.z};
+        triggerOnTarget=!!(def && firearmClasses.has(def.class) && ammo?.ammo > 0 &&
+            this.drawT <= 0 && !this.reloading && !this.charging &&
+            g.time >= (this.nextFire || 0) && triggerTarget(g, origin));
+        if (triggerOnTarget) {
+          if (!triggerTargetSince) triggerTargetSince=performance.now();
+          const delay=cfg.triggerDelay?Math.max(0,Math.min(500,
+            Number(cfg.triggerDelayMs)||0)):0;
+          if (performance.now()-triggerTargetSince<delay) return runOriginal();
+          return runForcedFire();
+        }
+      }
+      if (!triggerOnTarget) triggerTargetSince=0;
+
+      if (!cfg.rageBot || !cfg.rageAutoFire ||
+          !rageCombatActive(g,true) || frameInput!==g.input) {
+        return runOriginal();
+      }
+      const def=this.def?.();
+      const ammo=this.state?.();
+      // Let the native fire/reload scheduler handle cadence and ammo;
+      // do not trigger grenade throws, knife swings, or objective actions.
+      if (!def || ['knife','grenade','c4','zeus'].includes(def.class) ||
+          !ammo || !(ammo.ammo>0) || this.drawT>0 ||
+          this.reloading || this.grenadeCooking || this.charging ||
+          g.time < (this.nextFire||0)) {
+        return runOriginal();
+      }
+      const p=g.player;
+      const origin={x:p.x,y:p.y+Number(p.eyeH??1.55)-(p._stepLift||0),z:p.z};
+      const target=rageTarget(g,origin);
+      if (!target) return runOriginal();
+      rageLastTarget=target;
+      return runForcedFire();
+    };
+    Object.defineProperty(wrapper,'__amnesisRageBot',{value:true});
+    w.update=wrapper;
+    rageHookedWeapons=w;
+  }
+
+
+
+  function aimTarget(g, sx, sy, sz) {
+    const canvas = g.renderer?.domElement || document.querySelector('#game canvas');
+    const camera = g.camera;
+
+    if (!canvas || !camera ||
+        !(g.botMgr?.bots || typeof g.allEntities === 'function')) return null;
+
+    const rect = canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+
+    camera.updateMatrixWorld?.(true);
+
+    const view = camera.matrixWorldInverse?.elements;
+    const projection = camera.projectionMatrix?.elements;
+
+    if (!view || !projection) return null;
+
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+    const radius = Number(cfg.silentFov) || 120;
+
+    let best = null;
+    let bestDistance = radius;
+
+    const bots = characterEntities(g);
+
+    for (const bot of bots) {
+      if (!bot?.alive || bot.team === g.player?.team) continue;
+      if (bot.spawnProt > 0) continue;
+
+      const agent = characterAgent(bot);
+      const head = agent?.bones?.head_0 || agent?.bones?.head;
+      if (!head) continue;
+
+      head.updateWorldMatrix?.(true, false);
+      const m = head.matrixWorld?.elements;
+      if (!m) continue;
+
+      const projected = point(head, view, projection, rect.width, rect.height);
+      if (!projected) continue;
+
+      const distance = Math.hypot(
+        projected[0] - centerX,
+        projected[1] - centerY
+      );
+
+      if (distance >= bestDistance) continue;
+
+      const dx = m[12] - sx;
+      const dy = m[13] - sy;
+      const dz = m[14] - sz;
+      const length = Math.hypot(dx, dy, dz);
+
+      if (length < 0.01) continue;
+
+      best = [dx / length, dy / length, dz / length];
+      bestDistance = distance;
+    }
+
+    return best;
+  }
+
+  function triggerTarget(g, origin) {
+    const canvas = g.renderer?.domElement || document.querySelector('#game canvas');
+    const camera = g.camera;
+    if (!canvas || !camera) return false;
+    const rect = canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return false;
+    camera.updateMatrixWorld?.(true);
+    const view = camera.matrixWorldInverse?.elements;
+    const projection = camera.projectionMatrix?.elements;
+    if (!view || !projection) return false;
+    const radius = Math.max(2, Math.min(40, Number(cfg.triggerRadius) || 8));
+    const cx = rect.width / 2, cy = rect.height / 2;
+    for (const enemy of characterEntities(g)) {
+      if (!enemy?.alive || enemy.team === g.player?.team || enemy.spawnProt > 0) continue;
+      const agent = characterAgent(enemy);
+      const head = agent?.bones?.head_0 || agent?.bones?.head;
+      if (!head) continue;
+      head.updateWorldMatrix?.(true, false);
+      const m = head.matrixWorld?.elements;
+      const projected = point(head, view, projection, rect.width, rect.height);
+      if (!m || !projected || Math.hypot(projected[0]-cx, projected[1]-cy) > radius) continue;
+      let visible = false;
+      try {
+        visible = g.physics?.lineClear?.(origin.x,origin.y,origin.z,m[12],m[13],m[14]) === true;
+        if (visible && typeof g.grenadeMgr?.lineBlockedBySmoke === 'function') {
+          visible = !g.grenadeMgr.lineBlockedBySmoke(
+            origin.x,origin.y,origin.z,m[12],m[13],m[14]
+          );
+        }
+      } catch { visible = false; }
+      if (visible) return true;
+    }
+    return false;
+  }
+
+  function ensureFireHook() {
+    const g = window.game;
+    if (!g || typeof g.fireBullet !== 'function') return;
+    if (g === hookedGame && g.fireBullet.__clutcherSilentAim) return;
+
+    const original = g.fireBullet;
+
+    const wrapper = function(shooter, x, y, z, dx, dy, dz, weapon) {
+      let bypassWorld = false, rageResolved = false;
+      if (shooter === this.player && this.state === 'playing') {
+        if (cfg.rageBot && rageCombatActive(this,true)) {
+          try {
+            const resolved = rageLastTarget?.enemy?.alive?
+              rageLastTarget:rageTarget(this, {x,y,z});
+            if (resolved) {
+              [dx,dy,dz]=[resolved.dir.x,resolved.dir.y,resolved.dir.z];
+              bypassWorld = !!cfg.rageFullMapWallbang;
+              rageResolved = true;
+            }
+          } catch (error) {
+            console.warn('[Rage Bot] targeting:', error);
+          }
+        } else if (cfg.silentAim) {
+          try {
+            const target = aimTarget(this, x, y, z);
+            if (target) [dx, dy, dz] = target;
+          } catch (error) {
+            console.warn('[Silent Aim] targeting:', error);
+          }
+        }
+      }
+      if (rageResolved && cfg.rageDamageBoost && weapon) {
+        const percent=Math.max(10,Math.min(500,Number(cfg.rageDamagePercent)||150));
+        weapon={...weapon,dmg:(Number(weapon.dmg)||0)*percent/100};
+      }
+      const gunMod=currentGunModifier(this);
+      if (gunMod&&weapon&&firearmClasses.has(weapon.class)) {
+        weapon={...weapon,
+          dmg:(Number(weapon.dmg)||0)*Math.max(0,Math.min(1000,
+            Number(gunMod.damage)||100))/100,
+          penetration:(Number(weapon.penetration)||0)*Math.max(0,Math.min(1000,
+            Number(gunMod.penetration)||100))/100
+        };
+      }
+      const fire = () => original.call(this, shooter, x, y, z, dx, dy, dz, weapon);
+      const physics = this.physics;
+      if (!bypassWorld || typeof physics?.castIntervals !== 'function') return fire();
+      const nativeCastIntervals = physics.castIntervals;
+      const ownDescriptor=Object.getOwnPropertyDescriptor(physics,'castIntervals');
+      const bulletGame=this;
+      const bypassCastIntervals = function(...args) {
+        if (this===physics&&args[7]===2&&Array.isArray(args[8])&&
+            args[8]===bulletGame._bulletPath?._w) {
+          args[8].length = 0;
+          return args[8];
+        }
+        return nativeCastIntervals.apply(this, args);
+      };
+      try { physics.castIntervals = bypassCastIntervals; }
+      catch { return fire(); }
+      if (physics.castIntervals !== bypassCastIntervals) return fire();
+      try {
+        return fire();
+      } finally {
+        if (ownDescriptor) Object.defineProperty(physics,'castIntervals',ownDescriptor);
+        else delete physics.castIntervals;
+      }
+    };
+
+    Object.defineProperty(wrapper, '__clutcherSilentAim', { value: true });
+
+    g.fireBullet = wrapper;
+    hookedGame = g;
+  }
+
+
+  const objectiveHookedControllers=new WeakSet();
+  const moneyHookedGames=new WeakSet();
+  const moneyHookedHuds=new WeakSet();
+
+  function withVirtualMoney(g,callback) {
+    if (!cfg.infiniteMoney||!g.player) return callback();
+    const real=Number(g.player.money)||0;
+    g.player.money=Number(g.modeCtl?.maxMoney)||16000;
+    try {return callback();}
+    finally {g.player.money=real;}
+  }
+
+  function ensureObjectiveHooks() {
+    const g=window.game;
+    if (!g) return;
+    const ctl=g.modeCtl;
+    if (ctl&&!objectiveHookedControllers.has(ctl)) {
+      if (typeof ctl.update==='function') {
+        const original=ctl.update;
+        ctl.update=function(dt,...args) {
+          if (cfg.fastPlant&&this.state==='live'&&this.carrier===g.player&&
+              this.plantProgress>0) this.plantProgress=1;
+          if (cfg.fastDefuse&&this.state==='planted'&&this.defuser===g.player&&
+              this.defuseProgress>0) this.defuseProgress=1;
+          return original.call(this,dt,...args);
+        };
+      }
+      if (typeof ctl.inBuyZone==='function') {
+        const original=ctl.inBuyZone;
+        ctl.inBuyZone=function(entity,...args) {
+          if (cfg.buyAnywhere&&entity===g.player) return true;
+          return original.call(this,entity,...args);
+        };
+      }
+      if (typeof ctl.buyTimeOk==='function') {
+        const original=ctl.buyTimeOk;
+        ctl.buyTimeOk=function(...args) {
+          if (cfg.buyAnytime&&['freeze','live'].includes(this.state)) return true;
+          return original.apply(this,args);
+        };
+      }
+      objectiveHookedControllers.add(ctl);
+    }
+    if (typeof g.tryBuy==='function'&&!moneyHookedGames.has(g)) {
+      const original=g.tryBuy;
+      g.tryBuy=function(...args) {
+        if (!cfg.infiniteMoney) return original.apply(this,args);
+        this._buyLogRoll?.();
+        const buys=Array.isArray(this._roundBuys)?this._roundBuys:null;
+        const before=buys?.length||0;
+        let result;
+        try {result=withVirtualMoney(this,()=>original.apply(this,args));}
+        finally {
+          const removed=buys?buys.splice(before):[];
+          for (const state of Object.values(this.weapons?.states||{})) {
+            if (removed.includes(state?.buy)) state.buy=null;
+          }
+          this.hud?.updateMoney?.();this.hud?.refreshBuyMoney?.(true);
+        }
+        return result;
+      };
+      moneyHookedGames.add(g);
+    }
+    const hud=g.hud;
+    if (hud&&!moneyHookedHuds.has(hud)) {
+      for (const name of ['updateMoney','refreshBuyMoney']) {
+        if (typeof hud[name]!=='function') continue;
+        const original=hud[name];
+        hud[name]=function(...args) {
+          return withVirtualMoney(g,()=>original.apply(this,args));
+        };
+      }
+      moneyHookedHuds.add(hud);
+    }
+  }
+
+  // =====================================================
+  // ECONOMY: VIRTUAL INFINITE CREDITS + HUD + AUTO-BUY
+  // =====================================================
+  function notifyCreditsChanged(){
+    try{window.dispatchEvent(new StorageEvent('storage',{key:INV_KEY}));}catch{}
+    try{window.game?.hud?.refreshMenuChrome?.();}catch{}
+  }
+  function enableCreditsVirtualization(){
+    if(creditsVirtualized) return;
+    const proto=Storage.prototype;
+    creditsStorageOriginals={getItem:proto.getItem,setItem:proto.setItem};
+    proto.getItem=function(key){
+      const raw=creditsStorageOriginals.getItem.call(this,key);
+      if(key!==INV_KEY||raw==null) return raw;
+      try{
+        const data=JSON.parse(raw);
+        if(data&&typeof data==='object') data.coins=VIRTUAL_CREDITS;
+        return JSON.stringify(data);
+      }catch{return raw;}
+    };
+    proto.setItem=function(key,value){
+      if(key!==INV_KEY) return creditsStorageOriginals.setItem.call(this,key,value);
+      let realCoins=null;
+      try{
+        const real=JSON.parse(creditsStorageOriginals.getItem.call(this,INV_KEY)||'null');
+        if(real&&typeof real.coins==='number') realCoins=real.coins;
+      }catch{}
+      try{
+        const next=JSON.parse(value);
+        if(next&&typeof next==='object'&&realCoins!=null) next.coins=realCoins;
+        return creditsStorageOriginals.setItem.call(this,key,JSON.stringify(next));
+      }catch{return creditsStorageOriginals.setItem.call(this,key,value);}
+    };
+    creditsVirtualized=true;
+    notifyCreditsChanged();
+  }
+  function disableCreditsVirtualization(){
+    if(!creditsVirtualized||!creditsStorageOriginals) return;
+    Storage.prototype.getItem=creditsStorageOriginals.getItem;
+    Storage.prototype.setItem=creditsStorageOriginals.setItem;
+    creditsVirtualized=false;
+    creditsStorageOriginals=null;
+    notifyCreditsChanged();
+  }
+  function syncEconomyCredits(){
+    if(cfg.infiniteCredits&&!creditsVirtualized) enableCreditsVirtualization();
+    else if(!cfg.infiniteCredits&&creditsVirtualized) disableCreditsVirtualization();
+  }
+  function readCredits(){
+    if(creditsVirtualized) return VIRTUAL_CREDITS;
+    try{
+      const data=JSON.parse(localStorage.getItem(INV_KEY)||'null');
+      return data&&typeof data.coins==='number'?data.coins:0;
+    }catch{return 0;}
+  }
+  function updateEconomyHud(g){
+    if(!cfg.economyHud||!g?.player){
+      if(economyHudEl){economyHudEl.remove();economyHudEl=null;}
+      return;
+    }
+    if(!economyHudEl){
+      economyHudEl=document.createElement('div');
+      economyHudEl.id='rawsclient-economy-hud';
+      document.documentElement.append(economyHudEl);
+    }
+    economyHudEl.style.cssText='position:fixed;left:14px;bottom:14px;z-index:2147483644;'+
+      'pointer-events:none;font:12px/1.4 Consolas,"Courier New",monospace;color:#eaeaf0;'+
+      'background:#0b0b0ddd;border-left:2px solid '+UI_ACCENT+';padding:6px 10px;';
+    const money=Math.round(Number(g.player.money)||0);
+    const credits=readCredits();
+    const round=Number.isFinite(Number(g.modeCtl?.roundNum))?g.modeCtl.roundNum:'-';
+    economyHudEl.innerHTML=
+      '<b style="color:'+UI_ACCENT+'">ECONOMY</b><br>'+
+      'Money: $'+money+'<br>'+
+      'Credits: '+(cfg.infiniteCredits?'&#8734;':credits)+'<br>'+
+      'Round: '+round;
+  }
+  function tryBuyId(g,id){
+    if(!id||typeof g?.tryBuy!=='function') return false;
+    try{return !!g.tryBuy(id,{quiet:true});}catch{return false;}
+  }
+  const autoBuyState={round:null,done:false,nextAt:0};
+  function runAutoBuyPurchases(g){
+    const preset=cfg.autoBuyPreset;
+    const team=g.player?.team;
+    if(preset==='off') return;
+    const rifle=team==='CT'?'m4a1s':'ak47';
+    const smg=team==='CT'?'mp9':'mac10';
+    if(preset==='rifle') tryBuyId(g,rifle);
+    else if(preset==='smg') tryBuyId(g,smg);
+    else if(preset==='sniper') tryBuyId(g,'awp');
+    else if(preset==='pistol') tryBuyId(g,'deagle');
+    else if(preset==='full'){tryBuyId(g,rifle);tryBuyId(g,'p250');}
+    if(cfg.autoBuyArmor) tryBuyId(g,'kevlarhelmet');
+    if(cfg.autoBuyKit&&team==='CT') tryBuyId(g,'defkit');
+    if(cfg.autoBuyGrenades){
+      for(let i=0;i<Math.min(4,Number(cfg.autoBuyFlash)||0);i++) tryBuyId(g,'flash');
+      for(let i=0;i<Math.min(4,Number(cfg.autoBuyHE)||0);i++) tryBuyId(g,'he');
+      for(let i=0;i<Math.min(4,Number(cfg.autoBuySmoke)||0);i++) tryBuyId(g,'smoke');
+    }
+  }
+  function autoBuyTick(g){
+    if(!cfg.autoBuyEnabled||cfg.autoBuyPreset==='off'){
+      autoBuyState.round=null;autoBuyState.done=false;return;
+    }
+    if(!g||g.state!=='playing'||!g.player?.alive) return;
+    const ctl=g.modeCtl;
+    if(!ctl) return;
+    const round=ctl.roundNum??ctl.round??null;
+    if(round!==autoBuyState.round){
+      autoBuyState.round=round;autoBuyState.done=false;
+      autoBuyState.nextAt=(Number(g.time)||0)+0.25;
+    }
+    if(autoBuyState.done) return;
+    if(ctl.state!=='freeze'){autoBuyState.done=true;return;}
+    if((Number(g.time)||0)<autoBuyState.nextAt) return;
+    if(typeof ctl.buyTimeOk==='function'&&!ctl.buyTimeOk()) return;
+    if(typeof ctl.inBuyZone==='function'&&!ctl.inBuyZone(g.player)) return;
+    try{runAutoBuyPurchases(g);}catch(error){console.warn('[RawS Client AutoBuy]',error);}
+    autoBuyState.done=true;
+  }
+  function ensureGameplayFeatureHooks() {
+    const g = window.game;
+    if (!g) return;
+    if (typeof g.playerShoot === 'function' && !g.playerShoot.__amnesisNoSpread) {
+      const original = g.playerShoot;
+      const wrapper = function(weapon, spreadX, spreadY, ...rest) {
+        const mod=currentGunModifier(this);
+        if (cfg.noSpread) { spreadX = 0; spreadY = 0; }
+        else if(mod){const factor=Math.max(0,Math.min(500,
+          Number(mod.spread)||100))/100;spreadX*=factor;spreadY*=factor;}
+        const weapons=this.weapons;
+        const punchP=weapons?.punchP,punchY=weapons?.punchY;
+        if(mod&&weapons){const recoil=Math.max(0,Math.min(500,
+          Number(mod.recoil)||100))/100;weapons.punchP=(Number(punchP)||0)*recoil;
+          weapons.punchY=(Number(punchY)||0)*recoil;}
+        try{return original.call(this, weapon, spreadX, spreadY, ...rest);}
+        finally{if(weapons){weapons.punchP=punchP;weapons.punchY=punchY;}}
+      };
+      Object.defineProperty(wrapper, '__amnesisNoSpread', {value:true});
+      g.playerShoot = wrapper;
+    }
+    if (typeof g.dealDamage === 'function' && !g.dealDamage.__amnesisLethalShots) {
+      const original = g.dealDamage;
+      const wrapper = function(victim, amount, attacker, headshot, weapon, hitgroup, hitSide, ...rest) {
+        if (cfg.lethalShots && attacker === this.player && victim !== attacker &&
+            victim?.alive && victim.team !== attacker?.team && firearmClasses.has(weapon?.class)) {
+          const health = Math.max(0, Number(victim.health) || 0);
+          const armor = Math.max(0, Number(victim.armor) || 0);
+          amount = Math.max(Number(amount) || 0, health + armor * 2 + 1);
+        }
+        return original.call(this, victim, amount, attacker, headshot, weapon, hitgroup, hitSide, ...rest);
+      };
+      Object.defineProperty(wrapper, '__amnesisLethalShots', {value:true});
+      g.dealDamage = wrapper;
+    }
+  }
+
+
+  // =====================================================
+  // AUTO BHOP  }
+
+
+  // =====================================================
+  // AUTO BHOP
+  // =====================================================
+
+  // Tracks the real (trusted) Space key, then re-sends a fresh Space keydown
+  // every frame while it's held so a jump registers the moment you land.
+  let spaceHeld = false;
+
+  window.addEventListener('keydown', e => {
+    if (e.isTrusted && e.code === 'Space') spaceHeld = true;
+  }, true);
+
+  window.addEventListener('keyup', e => {
+    if (e.isTrusted && e.code === 'Space') spaceHeld = false;
+  }, true);
+
+  window.addEventListener('blur', () => { spaceHeld = false; });
+
+  function bhopFrame() {
+    requestAnimationFrame(bhopFrame);
+
+    if (!(cfg.autoBhop || cfg.superBhop) || !spaceHeld || uiOpen) return;
+    if (window.game?.state !== 'playing') return;
+
+    const target = window.game?.renderer?.domElement ||
+      document.querySelector('#game canvas') || document.body;
+    if (!target) return;
+
+    try {
+      target.dispatchEvent(new KeyboardEvent('keydown', {
+        key: ' ', code: 'Space', keyCode: 32, which: 32,
+        repeat: false, bubbles: true, cancelable: true
+      }));
+    } catch (error) {
+      console.warn('[Auto Bhop]', error);
+    }
+  }
+
+  requestAnimationFrame(bhopFrame);
+
+  function applySuperBhopBoost(player, g) {
+    if (!cfg.superBhop || !spaceHeld || uiOpen || g?.state !== 'playing' ||
+        !player?.alive || player.onGround || player.onLadder) return;
+    const baseSpeed = Number(g.weapons?.maxSpeed?.());
+    if (!(baseSpeed > 0)) return;
+    const percent = Math.max(100, Math.min(500,
+      Number(cfg.superBhopSpeedPercent) || 250));
+    const targetSpeed = baseSpeed * percent / 100;
+    const currentSpeed = Math.hypot(Number(player.vx) || 0, Number(player.vz) || 0);
+    if (currentSpeed >= targetSpeed) return;
+    if (currentSpeed > 0.01) {
+      const scale = targetSpeed / currentSpeed;
+      player.vx *= scale;
+      player.vz *= scale;
+      return;
+    }
+    player.vx = -Math.sin(Number(player.yaw) || 0) * targetSpeed;
+    player.vz = -Math.cos(Number(player.yaw) || 0) * targetSpeed;
+  }
+
+  // =====================================================
+  // AUTO STRAFE - NATIVE MOVEMENT / AIR ACCELERATION
+  // =====================================================
+
+  // The game's player.update() reads its action binds with input.downA(),
+  // consumes mouse deltas with input.consumeMouse(), and accelerates with
+  // player.accelerate(wishX, wishZ, wishSpeed, acceleration, deltaTime).
+  // Wrap these only DURING the player's own update: ground movement, ladders,
+  // custom keybinds, camera input and unrelated systems stay untouched.
+  // Original SillyHack WASD Autostrafe v1.2 steering math.
+  // Compare both acceleration headings against the actual WASD target
+  // and choose the one that makes the resulting velocity point closest
+  // to the player's desired movement direction.
+  let autoStrafeLastSide = 1;
+
+  function strafeDirection(player, input, cap, acceleration, delta) {
+    const forward = Number(!!input.downA('forward')) -
+      Number(!!input.downA('back'));
+    const right = Number(!!input.downA('right')) -
+      Number(!!input.downA('left'));
+    if (!forward && !right) return null;
+
+    const sin = Math.sin(player.yaw);
+    const cos = Math.cos(player.yaw);
+    let targetX = -sin * forward + cos * right;
+    let targetZ = -cos * forward - sin * right;
+    const targetLength = Math.hypot(targetX, targetZ);
+    if (!(targetLength > 0) || !(cap > 0) ||
+        !(acceleration > 0) || !(delta > 0)) return null;
+
+    targetX /= targetLength;
+    targetZ /= targetLength;
+
+    const vx = Number(player.vx) || 0;
+    const vz = Number(player.vz) || 0;
+    const speed = Math.hypot(vx, vz);
+    if (speed < 0.05) return [targetX, targetZ];
+
+    const step = Math.min(acceleration * delta, cap);
+    const dot = Math.max(0, cap - step);
+    const angle = Math.acos(Math.min(1, dot / speed));
+    const velocityAngle = Math.atan2(vz, vx);
+    const targetAngle = Math.atan2(targetZ, targetX);
+
+    let best = null;
+    for (const sign of [autoStrafeLastSide, -autoStrafeLastSide]) {
+      const heading = velocityAngle + sign * angle;
+      const x = Math.cos(heading);
+      const z = Math.sin(heading);
+      const amount = Math.max(0, Math.min(
+        acceleration * delta, cap - (vx * x + vz * z)
+      ));
+      const nextAngle = Math.atan2(vz + z * amount, vx + x * amount);
+      const error = Math.abs(Math.atan2(
+        Math.sin(nextAngle - targetAngle),
+        Math.cos(nextAngle - targetAngle)
+      ));
+
+      if (!best || error < best.error - 1e-9) {
+        best = { x, z, side: sign, error };
+      }
+    }
+
+    if (!best) return null;
+    autoStrafeLastSide = best.side;
+    return [best.x, best.z];
+  }
+
+  // Match the old WASD module's default 100% air speed limiter.
+  // This applies only to WASD Autostrafe; Legit mode remains untouched.
+  // Optional WASD-only speed cap. With the custom adjustment disabled,
+  // the old 100% cap remains in effect exactly as in v1.6.5.
+  function limitWASDAirSpeed(player, game) {
+    let limit = game.weapons?.maxSpeed?.();
+    if (!Number.isFinite(limit) || !(limit > 0)) return;
+
+    const rawPercent = Number(cfg.strafeSpeedPercent);
+    const customPercent = Number.isFinite(rawPercent)
+      ? Math.max(50, Math.min(1000, rawPercent)) : 100;
+    limit *= (cfg.strafeCustomSpeed ? customPercent : 100) / 100;
+
+    if (player.crouching) limit *= 0.34;
+    else if (player.walking) limit *= 0.52;
+
+    if (Number.isFinite(player.tagFactor)) {
+      limit *= Math.max(0, Math.min(1, player.tagFactor));
+    }
+
+    const speed = Math.hypot(player.vx, player.vz);
+    if (speed > limit && speed > 0) {
+      const scale = limit / speed;
+      player.vx *= scale;
+      player.vz *= scale;
+    }
+  }
+
+  function ensureAutoStrafeHook() {
+    const g = window.game;
+    const player = g?.player;
+    if (!player || typeof player.update !== 'function') return;
+    if (player.update.__amnesisAutoStrafe) return;
+    const originalUpdate = player.update;
+
+    function patchedPlayerUpdate(dt, input, ...rest) {
+      syncRageLifecycle(g);
+      const rageMoveTarget=rageCombatActive(g,true)&&rageLastTarget?.enemy?.alive&&
+        rageLastTarget.enemy.team!==this.team;
+      const runUpdate = () => {
+        const wasGrounded = !!this.onGround;
+        const wasLadder = !!this.onLadder;
+        if (cfg.bhopNoStamina && (cfg.autoBhop || cfg.superBhop) && spaceHeld) {
+          this.stamina = 0;
+        }
+        const result = originalUpdate.call(this, dt, input, ...rest);
+        if (cfg.autoLandingHop && !wasGrounded && this.onGround && !this.onLadder) {
+          this.jumpBuffer = .12;
+        }
+        applySuperBhopBoost(this, g);
+        return result;
+      };
+            const mode = ['legit', 'rage'].includes(cfg.strafeMode) ? cfg.strafeMode : 'wasd';
+      if (!cfg.autoStrafe || !input || !this.alive ||
+          g.state !== 'playing' || g.frozen || uiOpen ||
+          this.onLadder) {
+        return runUpdate();
+      }
+
+      if (mode === 'legit' &&
+          typeof input.downA === 'function' &&
+          typeof input.consumeMouse === 'function') {
+        const oldDownA = input.downA;
+        const oldConsumeMouse = input.consumeMouse;
+        const hadDownA = Object.prototype.hasOwnProperty.call(input, 'downA');
+        const hadConsume = Object.prototype.hasOwnProperty.call(input, 'consumeMouse');
+        let mouseSide = 0;
+
+        input.consumeMouse = function(...args) {
+          const motion = oldConsumeMouse.apply(this, args);
+          const dx = Number(motion?.dx) || 0;
+          mouseSide = dx > 0.1 ? 1 : dx < -0.1 ? -1 : 0;
+          return motion;
+        };
+        input.downA = function(action, ...args) {
+          // The game already consumed the same mouse delta for actual look.
+          // Only synthesize A/D during airborne movement; ground stays native.
+          if (!player.onGround && !player.onLadder && mouseSide &&
+              (action === 'left' || action === 'right')) {
+            return action === 'right' ? mouseSide > 0 : mouseSide < 0;
+          }
+          return oldDownA.call(this, action, ...args);
+        };
+        try {
+          return runUpdate();
+        } finally {
+          if (hadDownA) input.downA = oldDownA;
+          else delete input.downA;
+          if (hadConsume) input.consumeMouse = oldConsumeMouse;
+          else delete input.consumeMouse;
+        }
+      }
+
+      if (mode === 'rage' && g.input?.locked && spaceHeld &&
+          typeof this.accelerate === 'function' &&
+          typeof input.downA === 'function') {
+        const oldAccelerate = this.accelerate;
+        const hadAccelerate = Object.prototype.hasOwnProperty.call(this, 'accelerate');
+        this.accelerate = function(x, z, wishSpeed, accel, delta) {
+          if (this.onGround || this.onLadder) {
+            return oldAccelerate.call(this, x, z, wishSpeed, accel, delta);
+          }
+          const baseSpeed = g.weapons?.maxSpeed?.();
+          if (!Number.isFinite(baseSpeed) || !(baseSpeed > 0)) {
+            return oldAccelerate.call(this, x, z, wishSpeed, accel, delta);
+          }
+          const rawPercent = Number(cfg.rageSpeedPercent);
+          const percent = Number.isFinite(rawPercent)
+            ? Math.max(50, Math.min(1000, rawPercent)) : 100;
+          const speed = baseSpeed * percent / 100;
+          const forward = Number(!!input.downA('forward')) - Number(!!input.downA('back'));
+          const right = Number(!!input.downA('right')) - Number(!!input.downA('left'));
+          // No steering oscillation or acceleration: snap to the requested heading.
+          // With no directional input, keep the existing heading at the selected speed.
+          let dx = -Math.sin(this.yaw) * forward + Math.cos(this.yaw) * right;
+          let dz = -Math.cos(this.yaw) * forward - Math.sin(this.yaw) * right;
+          if (!forward && !right) {
+            dx = Number(this.vx) || 0;
+            dz = Number(this.vz) || 0;
+          }
+          const length = Math.hypot(dx, dz);
+          if (length > 0) {
+            this.vx = dx / length * speed;
+            this.vz = dz / length * speed;
+          }
+        };
+        try {
+          return runUpdate();
+        } finally {
+          if (hadAccelerate) this.accelerate = oldAccelerate;
+          else delete this.accelerate;
+        }
+      }
+
+      if (mode === 'wasd' && g.input?.locked &&
+          typeof this.accelerate === 'function' &&
+          typeof input.downA === 'function') {
+        const oldAccelerate = this.accelerate;
+        const hadAccelerate = Object.prototype.hasOwnProperty.call(this, 'accelerate');
+        this.accelerate = function(x, z, wishSpeed, accel, delta) {
+          if (!this.onGround && !this.onLadder) {
+            const desired = strafeDirection(this, input, wishSpeed, accel, delta);
+            if (desired) [x, z] = desired;
+          }
+          const result = oldAccelerate.call(this, x, z, wishSpeed, accel, delta);
+          if (!this.onGround && !this.onLadder) {
+            limitWASDAirSpeed(this, g);
+          }
+          return result;
+        };
+        try {
+          return runUpdate();
+        } finally {
+          if (hadAccelerate) this.accelerate = oldAccelerate;
+          else delete this.accelerate;
+        }
+      }
+      return runUpdate();
+    }
+
+    Object.defineProperty(patchedPlayerUpdate, '__amnesisAutoStrafe', {
+      value: true
+    });
+    player.update = patchedPlayerUpdate;
+  }
+
+  function ensureAllHooks() {
+    ensureRageFireHook();
+    ensureFireHook();
+    ensureGameplayFeatureHooks();
+    ensureAutoStrafeHook();
+    ensureObjectiveHooks();
+  }
+  ensureAllHooks();
+  setInterval(ensureAllHooks,250);
+
+  // =====================================================
+  // SKELETON ESP - UNCAPPED
+  // =====================================================
+
+  const skeleton = [
+    ['head_0', 'neck_0'],
+    ['neck_0', 'spine_3'],
+    ['spine_3', 'spine_2'],
+    ['spine_2', 'spine_1'],
+    ['spine_1', 'spine_0'],
+    ['spine_0', 'pelvis'],
+
+    ['spine_3', 'clavicle_L'],
+    ['clavicle_L', 'arm_upper_L'],
+    ['arm_upper_L', 'arm_lower_L'],
+    ['arm_lower_L', 'hand_L'],
+
+    ['spine_3', 'clavicle_R'],
+    ['clavicle_R', 'arm_upper_R'],
+    ['arm_upper_R', 'arm_lower_R'],
+    ['arm_lower_R', 'hand_R'],
+
+    ['pelvis', 'leg_upper_L'],
+    ['leg_upper_L', 'leg_lower_L'],
+    ['leg_lower_L', 'ankle_L'],
+
+    ['pelvis', 'leg_upper_R'],
+    ['leg_upper_R', 'leg_lower_R'],
+    ['leg_lower_R', 'ankle_R']
+  ];
+
+  const fallback = {
+    spine_0: ['spine_1'],
+    clavicle_L: ['arm_upper_L'],
+    clavicle_R: ['arm_upper_R'],
+    ankle_L: ['foot_L'],
+    ankle_R: ['foot_R']
+  };
+
+  let overlay, ctx, espBoundsCanvas=null, espBounds=null, espBoundsAt=0;
+
+  // =====================================================
+  // PLAYER VISIBILITY TEST - BOX COLOR SUPPORT
+  // =====================================================
+  // Show enemy bearings on a small ring around the crosshair, including
+  // enemies outside the view. Neutral = occluded, red = unobstructed.
+  // Use the entity's world-space bones for stable projection.
+  const entitySightCache = new WeakMap();
+
+  function entityVisible(g, enemy, now) {
+    const old = entitySightCache.get(enemy);
+    if (old && now - old.time < 80) return old.visible;
+
+    const p = g.player;
+    const physics = g.physics;
+    let visible = false;
+    if (typeof physics?.lineClear === 'function') {
+      // Use physical player eye coordinates, not the chase-camera offset.
+      const sx = Number(p.x);
+      const sy = Number(p.y) + Number(p.eyeH ?? 1.6256) -
+        Number(p._stepLift || 0);
+      const sz = Number(p.z);
+      const ex = Number(enemy.x);
+      const ez = Number(enemy.z);
+      const ey = Number(enemy.y);
+      const eye = Number(enemy.eyeH ?? (enemy.crouching ? 1.1 : 1.6256));
+      const height = Number(enemy.height ?? (enemy.crouching ? 1.15 : 1.8));
+      const smoke = g.grenadeMgr;
+
+      if ([sx, sy, sz, ex, ez, ey, eye, height].every(Number.isFinite)) {
+        // A partial peek counts as visible if any head/torso point is clear.
+        for (const ty of [ey + eye, ey + height * .68, ey + height * .40]) {
+          try {
+            if (!physics.lineClear(sx, sy, sz, ex, ty, ez)) continue;
+            if (typeof smoke?.lineBlockedBySmoke === 'function' &&
+                smoke.lineBlockedBySmoke(sx, sy, sz, ex, ty, ez)) continue;
+            visible = true;
+            break;
+          } catch { /* Unknown trace is not assumed visible. */ }
+        }
+      }
+    }
+    entitySightCache.set(enemy, {time:now, visible});
+    return visible;
+  }
+
+  function mul(m, a) {
+    return [
+      m[0]*a[0] + m[4]*a[1] + m[8]*a[2] + m[12]*a[3],
+      m[1]*a[0] + m[5]*a[1] + m[9]*a[2] + m[13]*a[3],
+      m[2]*a[0] + m[6]*a[1] + m[10]*a[2] + m[14]*a[3],
+      m[3]*a[0] + m[7]*a[1] + m[11]*a[2] + m[15]*a[3]
+    ];
+  }
+
+  function point(bone, view, projection, w, h) {
+    const m = bone?.matrixWorld?.elements;
+    if (!m) return null;
+
+    const eye = mul(view, [m[12], m[13], m[14], 1]);
+    const clip = mul(projection, eye);
+
+    if (clip[3] <= 0.001 ||
+        clip[2] < -clip[3] ||
+        clip[2] > clip[3]) return null;
+
+    const x = (clip[0] / clip[3] * 0.5 + 0.5) * w;
+    const y = (0.5 - clip[1] / clip[3] * 0.5) * h;
+
+    return Number.isFinite(x) && Number.isFinite(y) ? [x, y] : null;
+  }
+
+  function espFrame() {
+    // No 16 ms throttle. Render on every browser animation frame.
+    requestAnimationFrame(espFrame);
+
+    const g = window.game;
+    const entityOverlay = !!(cfg.espCrosshairLines || cfg.boxESP || cfg.cornerBoxESP ||
+      cfg.boxFill || cfg.headDotESP);
+    const active = !!(entityOverlay || cfg.crosshairEnabled ||
+        (cfg.silentAim && cfg.silentCircle)) &&
+      g?.state === 'playing' &&
+      g?.camera &&
+      (g?.botMgr?.bots || typeof g?.allEntities === 'function');
+
+    if (!overlay) return;
+
+    overlay.style.display = active ? 'block' : 'none';
+    if (!active) return;
+
+    const canvas = g.renderer?.domElement || document.querySelector('#game canvas');
+    if (!canvas) return;
+
+    const boundsNow=performance.now();
+    if (canvas!==espBoundsCanvas||!espBounds||boundsNow-espBoundsAt>250) {
+      espBoundsCanvas=canvas;espBounds=canvas.getBoundingClientRect();espBoundsAt=boundsNow;
+    }
+    const bounds=espBounds;
+    if (bounds.width <= 0 || bounds.height <= 0) return;
+
+    overlay.style.left = `${bounds.left}px`;
+    overlay.style.top = `${bounds.top}px`;
+    overlay.style.width = `${bounds.width}px`;
+    overlay.style.height = `${bounds.height}px`;
+
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const pw = Math.round(bounds.width * dpr);
+    const ph = Math.round(bounds.height * dpr);
+
+    if (overlay.width !== pw || overlay.height !== ph) {
+      overlay.width = pw;
+      overlay.height = ph;
+    }
+
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, bounds.width, bounds.height);
+
+    if (cfg.crosshairEnabled) {
+      const speed = Math.hypot(Number(g.player.vx) || 0, Number(g.player.vz) || 0);
+      const text = Math.round(speed / .0254) + ' u/s  |  ' + speed.toFixed(1) + ' m/s';
+      ctx.save();
+      ctx.font = 'bold 13px Consolas,monospace';
+      ctx.textAlign = 'center';
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = 'rgba(0,0,0,.9)';
+      ctx.strokeText(text, bounds.width / 2, bounds.height - 42);
+      ctx.fillStyle = UI_ACCENT;
+      ctx.fillText(text, bounds.width / 2, bounds.height - 42);
+      ctx.restore();
+    }
+
+    if (cfg.crosshairEnabled) {
+      const cx = bounds.width / 2;
+      const cy = bounds.height / 2;
+      const size = Math.max(2, Math.min(30, Number(cfg.crosshairSize) || 8));
+      const gap = Math.max(0, Math.min(20, Number(cfg.crosshairGap) || 0));
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(cx - gap - size, cy); ctx.lineTo(cx - gap, cy);
+      ctx.moveTo(cx + gap, cy); ctx.lineTo(cx + gap + size, cy);
+      ctx.moveTo(cx, cy - gap - size); ctx.lineTo(cx, cy - gap);
+      ctx.moveTo(cx, cy + gap); ctx.lineTo(cx, cy + gap + size);
+      ctx.strokeStyle = cfg.crosshairColor;
+      ctx.lineWidth = Math.max(1, Math.min(6, Number(cfg.crosshairWidth) || 2));
+      ctx.lineCap = 'square';
+      ctx.shadowColor = 'rgba(0,0,0,.9)';
+      ctx.shadowBlur = 2;
+      if (cfg.crosshairOutline) {
+        ctx.strokeStyle='rgba(0,0,0,.95)';
+        ctx.lineWidth=Math.max(1,Math.min(6,Number(cfg.crosshairWidth)||2))+2;
+        ctx.stroke();
+        ctx.strokeStyle=cfg.crosshairColor;
+        ctx.lineWidth=Math.max(1,Math.min(6,Number(cfg.crosshairWidth)||2));
+      }
+      ctx.stroke();
+      if (cfg.crosshairDot) {
+        ctx.fillStyle=cfg.crosshairColor;
+        ctx.strokeStyle='rgba(0,0,0,.95)';
+        ctx.lineWidth=cfg.crosshairOutline?2:0;
+        ctx.beginPath();
+        ctx.arc(cx,cy,Math.max(1,Math.min(6,Number(cfg.crosshairDotSize)||2)),0,Math.PI*2);
+        ctx.fill();
+        if (cfg.crosshairOutline) ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    if (cfg.silentAim && cfg.silentCircle) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(
+        bounds.width / 2,
+        bounds.height / 2,
+        Number(cfg.silentFov) || 120,
+        0,
+        Math.PI * 2
+      );
+      ctx.strokeStyle = cfg.silentCircleColor;
+      ctx.globalAlpha = Math.max(.1, Math.min(1,
+        Number(cfg.silentCircleOpacity) / 100 || .85));
+      ctx.lineWidth = Math.max(.5, Math.min(5,
+        Number(cfg.silentCircleWidth) || 1.25));
+      ctx.shadowBlur = 0;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    if (!entityOverlay) return;
+
+    const camera = g.camera;
+    camera.updateMatrixWorld?.(true);
+
+    const view = camera.matrixWorldInverse?.elements;
+    const projection = camera.projectionMatrix?.elements;
+    if (!view || !projection) return;
+
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.shadowColor = '#000';
+    ctx.shadowBlur = 3;
+
+    const bots = characterEntities(g);
+
+    for (const bot of bots) {
+      if (!bot?.alive || !characterAgent(bot)?.bones) continue;
+      if (!cfg.espShowTeammates &&
+          g.player?.team != null &&
+          bot.team === g.player.team) continue;
+
+      const entityDistance=Math.hypot(
+        Number(bot.x)-Number(g.player?.x),
+        Number(bot._visY??bot.y)-Number(g.player?.y),
+        Number(bot.z)-Number(g.player?.z)
+      );
+      const maxDistance=Math.max(0,Math.min(300,Number(cfg.espMaxDistance)||0));
+      if (!Number.isFinite(entityDistance) ||
+          (maxDistance>0 && entityDistance>maxDistance)) continue;
+
+      const agent = characterAgent(bot);
+      agent.root?.updateMatrixWorld?.(true);
+
+      const coords = Object.create(null);
+
+      const normalized = normalizedAgentBones(agent);
+      const resolve = name => [name, ...(fallback[name] || [])]
+        .map(key => agent.bones[key] || normalized.get(key.toLowerCase())).find(Boolean);
+
+      for (const [a, b] of skeleton) {
+        if (!(a in coords)) {
+          coords[a] = point(resolve(a), view, projection, bounds.width, bounds.height);
+        }
+        if (!(b in coords)) {
+          coords[b] = point(resolve(b), view, projection, bounds.width, bounds.height);
+        }
+      }
+
+      const teammate = g.player?.team != null && bot.team === g.player.team;
+      let espColor = teammate ? cfg.espTeamColor : cfg.espEnemyColor;
+      const wantsBoxColor=cfg.boxESP||cfg.cornerBoxESP||cfg.boxFill;
+      const boxVisible=!teammate&&wantsBoxColor?
+        entityVisible(g,bot,performance.now()):false;
+      const boxColor=teammate?cfg.boxTeamColor:
+        boxVisible?cfg.boxVisibleColor:cfg.boxHiddenColor;
+      const entityAlpha=Math.max(.1,Math.min(1,Number(cfg.espOpacity)/100||1));
+      ctx.globalAlpha=entityAlpha;
+      const joints = Object.values(coords).filter(p => p &&
+        p[0] >= -bounds.width && p[0] <= bounds.width * 2 &&
+        p[1] >= -bounds.height && p[1] <= bounds.height * 2
+      );
+
+      if (joints.length < 3) {
+        ctx.globalAlpha=1;ctx.shadowColor='#000';ctx.shadowBlur=3;continue;
+      }
+
+      const left = Math.min(...joints.map(p => p[0]));
+      const right = Math.max(...joints.map(p => p[0]));
+      const top = Math.min(...joints.map(p => p[1]));
+      const bottom = Math.max(...joints.map(p => p[1]));
+
+      const width = right - left;
+      const height = bottom - top;
+
+      if (height < 5 ||
+          height > bounds.height * 1.5 ||
+          width > bounds.width) {
+        ctx.globalAlpha=1;ctx.shadowColor='#000';ctx.shadowBlur=3;continue;
+      }
+
+      const center = (left + right) / 2;
+
+      if (cfg.espCrosshairLines) {
+        ctx.save();ctx.strokeStyle=espColor;ctx.globalAlpha=entityAlpha*.55;
+        ctx.lineWidth=Math.max(.5,Math.min(3,Number(cfg.boxThickness)||1));
+        ctx.beginPath();ctx.moveTo(bounds.width/2,bounds.height/2);
+        ctx.lineTo(center,top);ctx.stroke();ctx.restore();
+      }
+
+      if (cfg.boxFill || cfg.boxESP) {
+        const boxWidth=Math.max(.5,Math.min(6,Number(cfg.boxThickness)||2));
+        ctx.save();
+        if (cfg.boxFill) {
+          ctx.fillStyle = cfg.boxFillColor;
+          ctx.globalAlpha = entityAlpha*Math.max(.01, Math.min(.5,
+            Number(cfg.boxFillOpacity) / 100 || .12));
+          ctx.fillRect(left, top, width, height);
+        }
+        if (cfg.boxESP) {
+          ctx.globalAlpha = entityAlpha;
+          ctx.lineWidth = boxWidth+2;
+          ctx.strokeStyle = 'rgba(0,0,0,.85)';
+          ctx.strokeRect(left, top, width, height);
+          ctx.lineWidth = boxWidth;
+          ctx.strokeStyle = boxColor;
+          ctx.strokeRect(left, top, width, height);
+        }
+        ctx.restore();
+      }
+
+      if (cfg.cornerBoxESP) {
+        const boxWidth=Math.max(.5,Math.min(6,Number(cfg.boxThickness)||2));
+        const corner = Math.max(4, Math.min(width, height) * .22);
+        const drawCorners = () => {
+          ctx.beginPath();
+          ctx.moveTo(left, top + corner); ctx.lineTo(left, top); ctx.lineTo(left + corner, top);
+          ctx.moveTo(right - corner, top); ctx.lineTo(right, top); ctx.lineTo(right, top + corner);
+          ctx.moveTo(left, bottom - corner); ctx.lineTo(left, bottom); ctx.lineTo(left + corner, bottom);
+          ctx.moveTo(right - corner, bottom); ctx.lineTo(right, bottom); ctx.lineTo(right, bottom - corner);
+          ctx.stroke();
+        };
+        ctx.save();
+        ctx.lineCap = 'square';
+        ctx.lineWidth = boxWidth+2;
+        ctx.strokeStyle = 'rgba(0,0,0,.9)';
+        drawCorners();
+        ctx.lineWidth = boxWidth;
+        ctx.strokeStyle = boxColor;
+        drawCorners();
+        ctx.restore();
+      }
+
+      if (cfg.headDotESP && coords.head_0) {
+        ctx.save();
+        ctx.fillStyle = espColor;
+        ctx.strokeStyle = 'rgba(0,0,0,.9)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(coords.head_0[0], coords.head_0[1],
+          Math.max(1, Math.min(8, Number(cfg.headDotSize) || 3)), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      ctx.globalAlpha=1;ctx.shadowColor='#000';ctx.shadowBlur=3;
+    }
+  }
+
+  function initESP() {
+    overlay = document.createElement('canvas');
+    overlay.style.cssText =
+      'position:fixed;pointer-events:none;z-index:2147483645;display:none;';
+
+    document.documentElement.appendChild(overlay);
+    ctx = overlay.getContext('2d');
+    requestAnimationFrame(espFrame);
+  }
+
+  // =====================================================
+  // GUI
+  // =====================================================
+
+  const svg = d => '<svg viewBox="0 0 24 24" aria-hidden="true">' + d + '</svg>';
+
+  const ICONS = {
+    Legit: svg('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M12 1v4M12 19v4M1 12h4M19 12h4"/>'),
+    Rage: svg('<path d="M13 3v7h6l-8 11v-7H5z"/>'),
+    Visuals: svg('<circle cx="12" cy="12" r="2"/><path d="M22 12c-2.7 4.7-6 7-10 7s-7.3-2.3-10-7c2.7-4.7 6-7 10-7s7.3 2.3 10 7"/>'),
+    Movement: svg('<path d="M4 17l5-5 4 3 7-8"/><path d="M15 7h5v5"/>'),
+    Misc: svg('<path d="M6 4v4M6 12v8M12 4v10M12 18v2M18 4v1M18 9v11"/><circle cx="6" cy="10" r="2"/><circle cx="12" cy="16" r="2"/><circle cx="18" cy="7" r="2"/>'),
+    Skins: svg('<path d="M4 4h10l6 6-10 10-6-6z"/><circle cx="9" cy="9" r="1.5"/>'),
+    Fun: svg('<circle cx="12" cy="12" r="9"/><path d="M8 10h.01M16 10h.01M8 15c2.5 2 5.5 2 8 0"/>'),
+    Settings: svg('<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9L7 7M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1"/>')
+  };
+
+  const elem = (tag, className, text) => {
+    const x = document.createElement(tag);
+    if (className) x.className = className;
+    if (text != null) x.textContent = text;
+    return x;
+  };
+
+  // Keep collapse state while switching tabs or rebuilding the menu.
+  const collapsedModules = new Set();
+
+  function section(name, description) {
+    const panel = elem('section', 'section collapsible');
+    const id = cfg.tab + ':' + name;
+    panel.dataset.sectionKey=id;
+    panel.dataset.sectionName=name;
+    panel.dataset.sectionDescription=description||'';
+    panel.__bindPrimary = null;
+    const heading = elem('strong', 'section-title', name);
+    heading.setAttribute('role', 'button');
+    heading.setAttribute('tabindex', '0');
+    const sync = () => {
+      const collapsed = collapsedModules.has(id);
+      panel.classList.toggle('collapsed', collapsed);
+      heading.setAttribute('aria-expanded', String(!collapsed));
+      heading.setAttribute('aria-label', name + (collapsed ? ', expand' : ', collapse'));
+    };
+    const toggle = () => {
+      if (collapsedModules.has(id)) collapsedModules.delete(id);
+      else collapsedModules.add(id);
+      sync();
+    };
+    panel.append(heading);
+    if (description) panel.append(elem('p', 'desc', description));
+    // Clicking the title, description, or unused card space toggles it.
+    // Leave all actual settings and their label rows fully interactive.
+    panel.addEventListener('click', event => {
+      if (event.target.closest('button,input,select,textarea,label,a,[contenteditable="true"]')) return;
+      toggle();
+    });
+    heading.addEventListener('keydown', event => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        toggle();
+      }
+    });
+    sync();
+    (pageBody || page).append(panel);
+    return panel;
+  }
+
+  function renderContext(panel) {
+    if(!contextPanel) return;
+    contextPanel.replaceChildren();
+    if(!panel){
+      contextPanel.append(elem('div','context-empty','Select a section to inspect it.'));
+      return;
+    }
+    const name=panel.dataset.sectionName||panel.querySelector('.section-title')?.textContent||cfg.tab;
+    const description=panel.dataset.sectionDescription||'Configure this module.';
+    const icon=elem('div','context-icon');
+    icon.innerHTML=ICONS[cfg.tab]||'';
+    const eyebrow=elem('div','context-eyebrow',cfg.tab.toUpperCase()+' / MODULE');
+    const title=elem('div','context-title',name);
+    const copy=elem('p','context-description',description);
+    const preview=elem('div','context-preview');
+    const controls=panel.querySelectorAll('input,select,button').length;
+    const primary=panel.__bindPrimary;
+    const enabled=primary?!!cfg[primary]:null;
+    preview.append(icon,elem('div','context-preview-name',name));
+    if(cfg.tab==='Skins'){
+      preview.classList.add('skin-preview');
+      preview.style.setProperty('--skin-accent',UI_ACCENT);
+      preview.append(elem('div','skin-preview-weapon',
+        titlecase(cfg.skinProfileWeapon||window.game?.weapons?.current||'weapon')));
+    }
+    const stats=elem('div','context-stats');
+    const addStat=(label,value)=>{
+      const row=elem('div','context-stat');
+      row.append(elem('span','',label),elem('b','',value));stats.append(row);
+    };
+    addStat('CONTROLS',String(controls));
+    addStat('STATE',enabled===null?'CONFIG':enabled?'ENABLED':'DISABLED');
+    contextPanel.append(eyebrow,title,copy,preview,stats);
+  }
+
+  function selectSection(key) {
+    if(!pageBody||!sectionList) return;
+    const sections=[...pageBody.children].filter(node=>node.classList?.contains('section'));
+    let selected=sections.find(panel=>panel.dataset.sectionKey===key)||sections[0]||null;
+    if(!selected){renderContext(null);return;}
+    activeSectionByTab.set(cfg.tab,selected.dataset.sectionKey);
+    for(const panel of sections)
+      panel.classList.toggle('is-active-section',panel===selected);
+    sectionList.querySelectorAll('.section-link').forEach(button=>{
+      const active=button.dataset.sectionKey===selected.dataset.sectionKey;
+      button.classList.toggle('is-active',active);
+      button.setAttribute('aria-current',active?'true':'false');
+    });
+    renderContext(selected);
+  }
+
+  function finalizePage() {
+    if(!pageBody||!sectionList) return;
+    sectionList.replaceChildren();
+    const sections=[...pageBody.children].filter(node=>node.classList?.contains('section'));
+    for(const panel of sections){
+      const name=panel.dataset.sectionName||panel.querySelector('.section-title')?.textContent||'Module';
+      const key=panel.dataset.sectionKey||cfg.tab+':'+name;
+      panel.dataset.sectionKey=key;
+      panel.dataset.sectionName=name;
+      const button=elem('button','section-link');
+      button.type='button';button.dataset.sectionKey=key;
+      button.append(elem('span','section-link-marker'),elem('span','section-link-name',name));
+      button.onclick=()=>selectSection(key);
+      sectionList.append(button);
+    }
+    selectSection(activeSectionByTab.get(cfg.tab)||sections[0]?.dataset.sectionKey);
+  }
+
+  function refreshContext() {
+    renderContext(pageBody?.querySelector('.section.is-active-section')||null);
+  }
+
+  function check(parent, label, key) {
+    const row = elem('label', 'field');
+    row.append(document.createTextNode(label));
+
+    const input = elem('input');
+    input.type = 'checkbox';
+    input.checked = !!cfg[key];
+    input.dataset.settingKey = key;
+
+    input.onchange = () => {
+      cfg[key] = input.checked;
+      save();
+      refreshContext();
+    };
+
+    row.append(input);
+    parent.append(row);    parent.append(row);
+  }
+
+  function aaSelect(parent, label, key, options, rerender = false) {
+    const row = elem('label', 'field');
+    row.append(elem('span', '', label));
+    const input = elem('select');
+    for (const [value, text] of options) {
+      const option = elem('option', '', text);
+      option.value = value;
+      input.append(option);
+    }
+    input.value = cfg[key];
+    input.onchange = () => {
+      cfg[key] = input.value; save();
+      if (rerender) renderPage();
+      else refreshContext();
+    };
+    row.append(input);
+    parent.append(row);
+  }
+
+  function aaRange(parent, label, key, min, max, step, unit) {
+    const row = elem('label', 'field');
+    const text = elem('span');
+    const input = elem('input');
+    Object.assign(input, {type:'range', min:String(min), max:String(max), step:String(step), value:String(cfg[key])});
+    input.style.width = '150px';
+    const update = () => {
+      cfg[key] = aaNumber(input.value, min, max, defaults[key]);
+      text.textContent = label + ': ' + cfg[key] + unit;
+    };
+    update();
+    input.oninput = () => { update(); save(); refreshContext(); };
+    row.append(text, input);
+    parent.append(row);
+  }
+
+  function colorField(parent, label, key) {
+    const row = elem('label', 'field');
+    row.append(elem('span', '', label));
+    const input = elem('input');
+    input.type = 'color';
+    input.value = cfg[key];
+    input.oninput = () => { cfg[key] = input.value; save(); refreshContext(); };
+    row.append(input);
+    parent.append(row);
+  }
+
+  function textField(parent,label,key,placeholder='') {
+    const row=elem('label','field');
+    row.append(elem('span','',label));
+    const input=elem('input');
+    input.type='text';input.value=cfg[key]||'';input.placeholder=placeholder;
+    input.onchange=()=>{cfg[key]=input.value.trim();save();refreshContext();};
+    row.append(input);parent.append(row);
+  }
+
+  function renderNav() {
+    nav.replaceChildren();
+
+    tabs.forEach(name => {
+      const b = elem('button', 'nav' + (cfg.tab === name ? ' active' : ''));
+      b.type='button';b.title=name;b.setAttribute('aria-label',name);
+      b.innerHTML = ICONS[name] + '<span></span>';
+      b.lastChild.textContent = name;
+
+      b.onclick = () => {
+        cfg.tab = name;
+        save();
+        renderNav();
+        renderPage();
+      };
+
+      nav.append(b);
+    });
+  }
+
+  function renderPage() {
+    page.replaceChildren();
+    pageBody = elem('div', 'panel-grid');
+    page.append(elem('h2', '', cfg.tab), pageBody);
+
+    if (cfg.tab === 'Rage') {
+      const rage = section(
+        'Rage Bot',
+        'Automatically target enemies using damageable collision hitboxes.'
+      );
+      check(rage, 'Enable Rage Bot', 'rageBot');
+      check(rage, 'Full-map wall penetration', 'rageFullMapWallbang');
+      check(rage, 'Rage Damage Boost', 'rageDamageBoost');
+      aaRange(rage, 'Damage scale', 'rageDamagePercent', 10, 500, 10, '%');
+      aaRange(rage, 'Minimum path damage', 'rageMinDamage', 1, 200, 1, '');
+      check(rage, 'Auto fire', 'rageAutoFire');
+
+      const rageRow = elem('label', 'field');
+      const rageLabel = elem('span', '', `Aim FOV: ${cfg.rageFov} deg`);
+      const rageSlider = elem('input');
+      rageSlider.type = 'range';
+      rageSlider.min = '1';
+      rageSlider.max = '180';
+      rageSlider.step = '1';
+      rageSlider.value = String(cfg.rageFov);
+      rageSlider.style.width = '170px';
+      rageSlider.oninput = () => {
+        cfg.rageFov = Number(rageSlider.value);
+        rageLabel.textContent = `Aim FOV: ${cfg.rageFov} deg`;
+        save();
+      };
+      rageRow.append(rageLabel, rageSlider);
+      rage.append(rageRow);
+
+      const rapid = section(
+        'Rapid Fire',
+        'Remove the delay between shots while firing; semi-auto weapons keep firing while held.'
+      );
+      check(rapid, 'Enable Rapid Fire', 'rapidFire');
+
+      const combat = section('Weapon Modifiers', 'Direct local weapon behavior controls.');
+      check(combat, 'No Spread', 'noSpread');
+      check(combat, 'No Recoil', 'noRecoil');
+      check(combat, 'Infinite Ammo', 'infiniteAmmo');
+      check(combat, 'Lethal Shots', 'lethalShots');
+
+    } else if (cfg.tab === 'Legit') {
+      const s = section(
+        'Silent Aim',
+        'Redirect locally fired bullets toward enemy head bones within the crosshair FOV without moving your camera.'
+      );
+
+      check(s, 'Enable Silent Aim', 'silentAim');
+      check(s, 'Show FOV circle', 'silentCircle');
+
+      const row = elem('label', 'field');
+      const label = elem('span', '', `FOV radius: ${cfg.silentFov} px`);
+      const slider = elem('input');
+
+      slider.type = 'range';
+      slider.min = '20';
+      slider.max = '500';
+      slider.step = '5';
+      slider.value = String(cfg.silentFov);
+      slider.style.width = '170px';
+
+      slider.oninput = () => {
+        cfg.silentFov = Number(slider.value);
+        label.textContent = `FOV radius: ${cfg.silentFov} px`;
+        save();
+      };
+
+      row.append(label, slider);
+      s.append(row);
+      colorField(s, 'FOV circle color', 'silentCircleColor');
+      aaRange(s, 'FOV circle opacity', 'silentCircleOpacity', 10, 100, 1, '%');
+      aaRange(s, 'FOV circle width', 'silentCircleWidth', .5, 5, .25, ' px');
+
+      const legitHelpers=section('Legit Helpers','Trigger and reload assistance.');
+      check(legitHelpers, 'Triggerbot', 'triggerBot');
+      aaRange(legitHelpers, 'Trigger radius', 'triggerRadius', 2, 40, 1, ' px');
+      check(legitHelpers, 'Trigger Delay', 'triggerDelay');
+      aaRange(legitHelpers, 'Trigger delay', 'triggerDelayMs', 0, 500, 10, ' ms');
+      check(legitHelpers, 'Auto Reload', 'autoReload');
+      aaRange(legitHelpers, 'Reload at ammo', 'autoReloadThreshold', 0, 15, 1, '');
+
+    } else if (cfg.tab === 'Movement') {
+      const bhop = section(
+        'Auto Bhop',
+        'Automatically jump again when you land while holding Space.'
+      );
+      check(bhop, 'Enable Auto Bhop', 'autoBhop');
+
+      const superBhop = section(
+        'Super Bhop',
+        'Automatically bunny hop while holding Space and boost airborne movement speed.'
+      );
+      check(superBhop, 'Enable Super Bhop', 'superBhop');
+      aaRange(superBhop, 'Air speed', 'superBhopSpeedPercent', 100, 500, 5, '%');
+
+      const strafe = section(
+        'Auto Strafe',
+        'Air strafe with WASD, mouse movement, or Rage mode.'
+      );
+      check(strafe, 'Enable Auto Strafe', 'autoStrafe');
+
+      const strafeModes = elem('div', 'modes');
+      [['wasd', 'WASD'], ['legit', 'Legit'], ['rage', 'Rage']].forEach(([id, label]) => {
+        const button = elem('button',
+          'mode' + (cfg.strafeMode === id ? ' selected' : ''), label);
+        button.onclick = () => {
+          cfg.strafeMode = id;
+          save();
+          renderPage();
+        };
+        strafeModes.append(button);
+      });
+      strafe.append(strafeModes);
+
+      if (cfg.strafeMode === 'wasd' || cfg.strafeMode === 'rage') {
+        const rageMode = cfg.strafeMode === 'rage';
+        const speedKey = rageMode ? 'rageSpeedPercent' : 'strafeSpeedPercent';
+        // Reuse the existing switch, field, number, and slider styling.
+        if (!rageMode) check(strafe, 'Custom WASD speed limit', 'strafeCustomSpeed');
+
+        const speedRow = elem('div', 'field');
+        const speedLabel = elem('span', '', 'Speed limit: 100.00%');
+        const speedControls = elem('div');
+        speedControls.style.cssText = 'display:flex;align-items:center;gap:10px;';
+
+        const speedSlider = elem('input');
+        speedSlider.type = 'range';
+        speedSlider.min = '50';
+        speedSlider.max = '1000';
+        speedSlider.step = '0.01';
+        speedSlider.style.width = '160px';
+        speedSlider.setAttribute('aria-label', rageMode ? 'Rage speed percent' : 'WASD speed limit percent');
+
+        const speedNumber = elem('input');
+        speedNumber.type = 'number';
+        speedNumber.min = '50';
+        speedNumber.max = '1000';
+        speedNumber.step = '0.01';
+        speedNumber.style.width = '85px';
+        speedNumber.setAttribute('aria-label', rageMode ? 'Exact Rage speed percent' : 'Exact WASD speed limit percent');
+
+        const speedInitial = Number(cfg[speedKey]);
+        cfg[speedKey] = Number.isFinite(speedInitial)
+          ? Math.round(Math.max(50, Math.min(1000, speedInitial)) * 100) / 100
+          : 100;
+
+        const refreshSpeed = () => {
+          const text = cfg[speedKey].toFixed(2);
+          speedLabel.textContent = `${rageMode ? 'Rage speed' : 'Speed limit'}: ${text}%`;
+          speedSlider.value = String(cfg[speedKey]);
+          speedNumber.value = text;
+        };
+        const changeSpeed = value => {
+          if (value === '' || !Number.isFinite(Number(value))) return;
+          cfg[speedKey] = Math.round(
+            Math.max(50, Math.min(1000, Number(value))) * 100
+          ) / 100;
+          refreshSpeed();
+          save();
+        };
+        speedSlider.oninput = () => changeSpeed(speedSlider.value);
+        speedNumber.onchange = () => changeSpeed(speedNumber.value);
+        speedControls.append(speedSlider, speedNumber);
+        speedRow.append(speedLabel, speedControls);
+        strafe.append(speedRow);
+        refreshSpeed();
+      }
+
+    } else if (cfg.tab === 'Visuals') {
+      const s = section('Boxes / Snaplines / Head Dot',
+        'Lightweight player outlines using the game skeleton projection.');
+      check(s, 'Show teammates', 'espShowTeammates');
+      check(s, 'Box ESP', 'boxESP');
+      check(s, 'Corner Box ESP', 'cornerBoxESP');
+      check(s, 'Filled Boxes', 'boxFill');
+      aaRange(s, 'Fill opacity', 'boxFillOpacity', 1, 50, 1, '%');
+      colorField(s, 'Visible box color', 'boxVisibleColor');
+      colorField(s, 'Hidden box color', 'boxHiddenColor');
+      colorField(s, 'Team box color', 'boxTeamColor');
+      colorField(s, 'Box fill color', 'boxFillColor');
+      check(s, 'Head Dot ESP', 'headDotESP');
+      aaRange(s, 'Head dot size', 'headDotSize', 1, 8, .5, ' px');
+      check(s, 'Snaplines', 'espCrosshairLines');
+      aaRange(s, 'Maximum distance', 'espMaxDistance', 0, 300, 5, ' m');
+      aaRange(s, 'Global opacity', 'espOpacity', 10, 100, 5, '%');
+      aaRange(s, 'Box thickness', 'boxThickness', .5, 6, .25, ' px');
+
+            const crosshair = section(
+        'Crosshair',
+        'A clean overlay crosshair independent of the game HUD.'
+      );
+      check(crosshair, 'Enable Crosshair', 'crosshairEnabled');
+      check(crosshair, 'Center Dot', 'crosshairDot');
+      aaRange(crosshair, 'Dot size', 'crosshairDotSize', 1, 6, .5, ' px');
+      check(crosshair, 'Crosshair Outline', 'crosshairOutline');
+      aaRange(crosshair, 'Line size', 'crosshairSize', 2, 30, 1, ' px');
+      aaRange(crosshair, 'Center gap', 'crosshairGap', 0, 20, 1, ' px');
+      aaRange(crosshair, 'Line width', 'crosshairWidth', 1, 6, .5, ' px');
+      colorField(crosshair, 'Crosshair color', 'crosshairColor');
+
+    } else if (cfg.tab === 'Misc') {
+
+      const economy=section('Bomb / Economy','Native-safe objective and buy helpers.');
+      check(economy,'Fast Plant','fastPlant');
+      check(economy,'Fast Defuse','fastDefuse');
+      check(economy,'Infinite Buy Money','infiniteMoney');
+      check(economy,'Buy Anywhere','buyAnywhere');
+      check(economy,'Buy Anytime','buyAnytime');
+      check(economy,'Infinite Shop Credits','infiniteCredits');
+      check(economy,'Economy HUD','economyHud');
+      check(economy,'Auto-Buy On Round Start','autoBuyEnabled');
+      aaSelect(economy,'Auto-Buy preset','autoBuyPreset',[
+        ['off','Off'],['full','Full rifle + pistol'],['rifle','Rifle'],['smg','SMG'],
+        ['sniper','Sniper (AWP)'],['pistol','Pistol only'],['armor','Armor only']
+      ]);
+      check(economy,'Auto-Buy armor + helmet','autoBuyArmor');
+      check(economy,'Auto-Buy defuse kit (CT)','autoBuyKit');
+      check(economy,'Auto-Buy grenades','autoBuyGrenades');
+      aaRange(economy,'Flashbangs','autoBuyFlash',0,4,1,'');
+      aaRange(economy,'HE grenades','autoBuyHE',0,4,1,'');
+      aaRange(economy,'Smoke grenades','autoBuySmoke',0,4,1,'');
+
+    } else if (cfg.tab === 'Skins') {
+      const finishOptions=configEnums.skinProfileFinish.map(id=>[id,
+        id==='native'?'Native texture':id==='custom'?'Custom image':titlecase(id)]);
+      const studio=section('Skin Studio','One editor for knife, firearm, and per-weapon finishes.');
+      check(studio,'Enable Skin Studio','skinChanger');
+      const detected=normalizeSkinWeapon(window.game?.weapons?.current)||'none';
+      studio.append(elem('p','note','Detected weapon: '+titlecase(detected)));
+
+      const models=section('Models','Choose local knife and glove models independently.');
+      aaSelect(models,'Knife model','skinKnifeModel',[
+        ['native','Native equipped'],['default','Team default'],
+        ...SKIN_KNIFE_MODELS.map(id=>[id,titlecase(id.replace(/^knife_/,''))])
+      ]);
+      aaSelect(models,'Glove model','skinGloveModel',[
+        ['native','Native equipped'],['default','Team default'],
+        ...SKIN_GLOVE_MODELS.map(id=>[id,titlecase(id)])
+      ]);
+      check(models,'Bare Hands','skinBareHands');
+      aaSelect(models,'Native paint mode','skinCurrentMode',[
+        ['native','Keep native paint'],['default','Remove native paint']
+      ]);
+
+      const editor=section('Finish Editor','Select a target, finish, and optional custom image.');
+      aaSelect(editor,'Edit target','skinEditorTarget',[
+        ['knife','Knife'],['global','All firearms'],['profile','Weapon profile']
+      ],true);
+      const target=cfg.skinEditorTarget;
+      if(target==='profile'){
+        check(editor,'Use Per-Weapon Profiles','skinPerWeaponTextures');
+        aaSelect(editor,'Profile weapon','skinProfileWeapon',
+          SKIN_FIREARM_IDS.map(id=>[id,weaponNames[id]||titlecase(id)]),true);
+      }
+      const finishKey=target==='knife'?'skinKnifeFinish':
+        target==='global'?'skinWeaponFinish':'skinProfileFinish';
+      aaSelect(editor,'Finish',finishKey,finishOptions,true);
+      const finish=cfg[finishKey];
+      if(finish==='custom'){
+        const urlKey=target==='knife'?'skinKnifeTextureUrl':
+          target==='global'?'skinWeaponTextureUrl':'skinProfileUrl';
+        textField(editor,'Direct image URL',urlKey,'https://.../texture.png');
+        const profileAsset=uploadedWeaponProfileImages.get(cfg.skinProfileWeapon);
+        const loadedName=target==='knife'?uploadedKnifeTextureName:
+          target==='global'?uploadedWeaponTextureName:profileAsset?.name||'';
+        const picker=elem('input');picker.type='file';picker.accept='image/png,image/jpeg,image/webp';picker.hidden=true;
+        const upload=elem('button','action','Upload Local Image');
+        const clear=elem('button','action','Clear Local Image');
+        const status=elem('p','note',loadedName?'Loaded: '+loadedName:'No local image loaded.');
+        const kind=target==='knife'?'knife':target==='global'?'weapon':
+          'weapon:'+cfg.skinProfileWeapon;
+        upload.onclick=()=>picker.click();
+        clear.onclick=()=>{
+          if(target==='knife'){uploadedKnifeTextureImage=null;uploadedKnifeTextureName='';}
+          else if(target==='global'){uploadedWeaponTextureImage=null;uploadedWeaponTextureName='';}
+          else uploadedWeaponProfileImages.delete(cfg.skinProfileWeapon);
+          knifeTextureVersion++;status.textContent='No local image loaded.';
+        };
+        picker.onchange=async()=>{const file=picker.files?.[0];if(!file)return;
+          try{await loadTextureFile(file,kind);status.textContent='Loaded: '+file.name;}
+          catch(error){status.textContent='Upload failed: '+error.message;}
+          finally{picker.value='';}};
+        editor.append(upload,clear,picker,status);
+      }
+      if(target==='profile'){
+        const saveProfile=elem('button','action','Save Profile');
+        saveProfile.onclick=()=>{const id=normalizeSkinWeapon(cfg.skinProfileWeapon);
+          cfg.skinWeaponProfiles={...(cfg.skinWeaponProfiles||{}),
+            [id]:{finish:cfg.skinProfileFinish,url:cfg.skinProfileUrl}};
+          cfg.skinPerWeaponTextures=true;save();renderPage();};
+        const clearProfile=elem('button','action','Delete Profile');
+        clearProfile.onclick=()=>{const id=normalizeSkinWeapon(cfg.skinProfileWeapon);
+          const profiles={...(cfg.skinWeaponProfiles||{})};delete profiles[id];
+          cfg.skinWeaponProfiles=profiles;uploadedWeaponProfileImages.delete(id);
+          save();renderPage();};
+        editor.append(saveProfile,clearProfile);
+        const summary=Object.entries(cfg.skinWeaponProfiles||{}).map(([id,data])=>
+          (weaponNames[id]||titlecase(id))+': '+titlecase(data.finish||'native'));
+        editor.append(elem('p','note',summary.length?'Profiles: '+summary.join(' | '):
+          'No weapon profiles saved.'));
+      }
+
+      const advanced=section('Reset / Advanced','Clear generated finishes without touching native inventory data.');
+      const resetSkins=elem('button','action','Reset Skin Overrides');
+      resetSkins.onclick=()=>{
+        cfg.skinCurrentMode='native';cfg.skinKnifeModel='native';
+        cfg.skinGloveModel='native';cfg.skinBareHands=false;
+        cfg.skinKnifeFinish='native';cfg.skinKnifeTextureUrl='';
+        cfg.skinWeaponFinish='native';cfg.skinWeaponTextureUrl='';
+        cfg.skinWeaponProfiles={};cfg.skinPerWeaponTextures=false;
+        cfg.skinEditorTarget='knife';
+        cfg.skinProfileWeapon='awp';cfg.skinProfileFinish='fade';cfg.skinProfileUrl='';
+        uploadedKnifeTextureImage=null;uploadedKnifeTextureName='';
+        uploadedWeaponTextureImage=null;uploadedWeaponTextureName='';
+        uploadedWeaponProfileImages.clear();knifeTextureVersion++;
+        save();renderPage();
+      };
+      advanced.append(resetSkins,elem('p','note',
+        'All overrides are local. Uploaded images take priority over direct URLs and are session-only.'));
+
+    } else if (cfg.tab === 'Settings') {
+      configControls();
+    } else {
+      const s = elem('section', 'section');
+      const empty = elem('div', 'empty');
+      empty.innerHTML = ICONS[cfg.tab] || '';
+      empty.append(
+        elem('b', '', 'No modules yet'),
+        elem('span', '', 'New options will show up here.')
+      );
+      s.append(empty);
+      pageBody.append(s);
+    }
+    finalizePage();
+
+    // RawS Client build: remove the modules explicitly excluded by the edit brief.
+    const removedSections = new Set([
+      'Anti Aim','Fake Lag / Freeze','Legit Aimbot',
+      'Hitsounds'
+    ]);
+    const removedFieldTerms = [
+      'legit recoil control','rcs amount','hitbox resolver',
+      'auto crouch on target','auto stop on target','target priority',
+      'auto jump on target','auto scope','enable bone esp','bone esp team',
+      'skeleton','glow / chams','health bar','armor bar','esp name',
+      'esp distance','esp weapon','esp tracers','randomize on kill',
+      'manual reroll'
+    ];
+    for (const panel of [...pageBody.querySelectorAll('.section')]) {
+      const heading = panel.querySelector('.section-title');
+      const title = (heading?.textContent || '').trim();
+      if (removedSections.has(title)) {
+        panel.remove();
+        continue;
+      }
+      for (const row of [...panel.querySelectorAll('.field')]) {
+        const label = (row.textContent || '').trim().toLowerCase();
+        if (removedFieldTerms.some(term => label.includes(term))) row.remove();
+      }
+      for (const button of [...panel.querySelectorAll('button')]) {
+        const label = (button.textContent || '').trim().toLowerCase();
+        if (removedFieldTerms.some(term => label.includes(term))) button.remove();
+      }
+    }
+    finalizePage();
+  }
+
+  function position() {
+    const width = Math.min(1180, innerWidth - 20);
+    const height = Math.min(680, innerHeight - 20);
+
+    cfg.x = Math.max(10, Math.min(
+      cfg.x ?? (innerWidth - width) / 2,
+      innerWidth - width - 10
+    ));
+
+    cfg.y = Math.max(10, Math.min(
+      cfg.y ?? (innerHeight - height) / 2,
+      innerHeight - height - 10
+    ));
+
+    box.style.left = cfg.x + 'px';
+    box.style.top = cfg.y + 'px';
+  }
+
+  function openMenu(show) {
+    if (!box) return;
+
+    uiOpen = show;
+    box.classList.toggle('open', show);
+    const mobileToggle = root?.getElementById('rawsclient-mobile-toggle');
+    if (mobileToggle) mobileToggle.textContent = show ? 'CLOSE' : 'RawS';
+
+    if (show) {
+      lockEl = document.pointerLockElement;
+      hadLock = !!lockEl;
+
+      if (hadLock) {
+        try { document.exitPointerLock(); } catch {}
+      }
+
+      document.body.style.cursor = 'default';
+    } else {
+      document.body.style.cursor = '';
+
+      if (hadLock) {
+        const target = lockEl?.isConnected
+          ? lockEl
+          : document.querySelector('#game canvas');
+
+        if (target && !document.pointerLockElement) {
+          try {
+            Promise.resolve(target.requestPointerLock()).catch(() => {});
+          } catch {}
+        }
+      }
+
+      hadLock = false;
+      lockEl = null;
+    }
+  }
+
+  const focused = () =>
+    uiOpen && root?.activeElement?.matches?.(
+      'input,textarea,select,[contenteditable="true"]'
+    );
+
+  for (const type of ['keydown', 'keyup', 'keypress']) {
+    window.addEventListener(type, e => {
+      if (focused()) e.stopImmediatePropagation();
+    }, true);
+  }
+
+  for (const type of ['keydown', 'keyup']) {
+    window.addEventListener(type, e => {
+      if (e.code !== 'ShiftRight') return;
+
+      e.preventDefault();
+      e.stopImmediatePropagation();
+
+      if (type === 'keydown' && !e.repeat && !focused()) {
+        openMenu(!uiOpen);
+      }
+    }, true);
+  }
+
+  function initialize() {
+    if (!document.body || document.getElementById('rawsclient-gui-host')) return;
+
+    const host = elem('div');
+    host.id = 'rawsclient-gui-host';
+    host.style.cssText =
+      'position:fixed;inset:0;pointer-events:none;z-index:2147483647';
+
+    document.documentElement.append(host);
+    root = host.attachShadow({ mode: 'open' });
+
+    root.innerHTML = `
+      <style>
+        *,*::before,*::after{box-sizing:border-box}
+        :host{font:12px Tahoma,"Segoe UI",Arial,sans-serif;color:#dedede}
+        button,input,select{font:inherit}
+
+        #window{position:fixed;width:1180px;height:680px;max-width:calc(100vw - 20px);max-height:calc(100vh - 20px);display:none;overflow:hidden;pointer-events:auto;isolation:isolate;--accent:#39ff14;--cyan:#39ff14;--bg0:#050805;--bg1:#090d08;--bg2:#0d120a;--line:#173b17;--muted:#7890a0;background:var(--bg0);border:1px solid #245f1b;border-radius:2px;box-shadow:0 24px 70px #000d}
+        #window::before{content:"";position:absolute;z-index:5;left:0;right:0;top:0;height:1px;background:var(--cyan);pointer-events:none}
+        #window.open{display:flex;flex-direction:column;animation:rawsclient-open .16s ease-out}
+        @keyframes rawsclient-open{from{opacity:0;transform:translateY(8px) scale(.988)}to{opacity:1;transform:none}}
+
+        #header{height:58px;flex:none;display:grid;grid-template-columns:190px minmax(0,1fr) 142px;align-items:stretch;padding:0;background:#050805;border-bottom:1px solid #1b4a60;cursor:grab;user-select:none}
+        #brand{display:flex;align-items:center;gap:10px;padding:0 14px;border-right:1px solid #17384a}
+        #brand .mark{position:relative;width:31px;height:31px;display:block;overflow:hidden;border:1px solid #257e9d;border-radius:50%;background:#07151f;box-shadow:0 0 18px #39ff1433}
+        #brand .mark img{display:block;width:100%;height:100%;object-fit:cover}
+        #brand div{display:flex;flex-direction:column;gap:2px}
+        #brand strong{font:700 14px/1 Tahoma,Arial,sans-serif;letter-spacing:2px;color:#fff}
+        #brand small{font:400 8px/1 Consolas,monospace;letter-spacing:1px;color:#607d8e}
+        #status{display:flex;align-items:center;justify-content:center;gap:7px;border-left:1px solid #17384a;background:#06131e;color:#7895a6;font:400 9px/1 Consolas,monospace;letter-spacing:.5px}
+        #status b{width:6px;height:6px;border-radius:50%;background:var(--cyan);box-shadow:0 0 10px var(--cyan)}
+
+        #body{display:grid;grid-template-columns:176px minmax(0,1fr) 238px;flex:1;min-height:0;background:var(--bg0)}
+        #sidebar{min-width:0;height:57px;display:flex;align-items:stretch;overflow-x:auto;background:#050f19}
+        #sidebar::before,#sidebar::after{display:none}
+        #section-rail{min-width:0;min-height:0;overflow:auto;background:var(--bg1);border-right:1px solid var(--line)}
+        .rail-heading{padding:16px 14px 9px;color:#3dbbd8;font:700 9px/1 Consolas,monospace;letter-spacing:1.5px}
+        #section-list{display:flex;flex-direction:column}
+        .section-link{position:relative;width:100%;min-height:40px;display:grid;grid-template-columns:3px minmax(0,1fr);align-items:center;gap:11px;padding:0 13px 0 0;border:0;border-bottom:1px solid #102b3a;background:transparent;color:#7790a0;text-align:left;cursor:pointer}
+        .section-link-marker{align-self:stretch;background:transparent}
+        .section-link-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .section-link:hover{background:#0c2230;color:#cce1eb}
+        .section-link.is-active{background:#0d2939;color:#eefaff}
+        .section-link.is-active .section-link-marker{background:var(--cyan);box-shadow:0 0 12px #39ff1477}
+        #content{min-width:0;min-height:0;padding:14px 16px 24px;overflow:auto;background:radial-gradient(circle at 50% 0,#0b2636 0,transparent 48%),var(--bg0)}
+        #context-panel{min-width:0;min-height:0;overflow:auto;padding:18px 16px;background:var(--bg1);border-left:1px solid var(--line)}
+        .panel-grid{display:block;column-count:initial}
+        .panel-grid>.section{display:none}
+        .panel-grid>.section.is-active-section{display:block}
+
+        ::-webkit-scrollbar{width:6px;height:6px}
+        ::-webkit-scrollbar-thumb{background:#19506a;border-radius:0}
+        ::-webkit-scrollbar-thumb:hover{background:var(--accent)}
+        ::-webkit-scrollbar-track{background:transparent}
+
+        .nav{display:flex;align-items:center;justify-content:center;gap:7px;min-width:82px;height:57px;border:0;border-right:1px solid #102c3c;background:#050f19;color:#a4b7c2;text-align:center;padding:0 10px;margin:0;font:600 10px/1 Tahoma,Arial,sans-serif;cursor:pointer;transition:background .12s,color .12s}
+        .nav svg{width:14px;height:14px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:square;stroke-linejoin:miter}
+        .nav:hover{color:#fff;background:#090d08b0d}
+        .nav.active{color:#fff;background:#111b0d;box-shadow:inset 0 -2px 0 var(--cyan)}
+        .nav.active svg{color:var(--cyan);filter:drop-shadow(0 0 6px #39ff1466)}
+
+        h2{font:700 14px/1 Tahoma,Arial,sans-serif;color:var(--cyan);margin:0 0 12px;padding:10px 12px;background:#091a27;border:1px solid #245f1b;border-left:3px solid var(--cyan);letter-spacing:.3px}
+        h2::before,h2::after{display:none}
+
+        .section{position:relative;width:100%;max-width:680px;margin:0 auto;padding:14px 16px 16px;background:#0b1009eb;border:1px solid #245f1b;border-radius:2px;box-shadow:0 14px 36px #0005;overflow:visible}
+        .section::before{display:none}
+        .section strong{font-size:12px;font-weight:700;letter-spacing:.2px;text-transform:none;color:#dff6ff}
+        .section.collapsible{cursor:pointer;transition:border-color .1s,background .1s}
+        .section.collapsible:hover{border-color:#39ff14;background:#0d2230;transform:none}
+        .section.collapsible .section-title{display:flex;justify-content:space-between;align-items:center;gap:12px;outline:none}
+        .section.collapsible .section-title::after{content:"+";font:400 13px/1 Consolas,monospace;color:#888}
+        .section.collapsible:not(.collapsed) .section-title::after{content:"-";color:var(--accent)}
+        .section.collapsible .section-title:focus-visible{outline:1px solid var(--accent);outline-offset:5px}
+        .section.collapsible.collapsed>:not(.section-title){display:none!important}
+        .section.collapsible label,.section.collapsible button,.section.collapsible input,.section.collapsible select{cursor:pointer}
+        .desc{color:#6f8b9b;font-size:10px;line-height:1.45;margin:5px 0 10px;max-width:98%}
+        .context-eyebrow{color:var(--cyan);font:700 9px/1 Consolas,monospace;letter-spacing:1.4px;margin-bottom:10px}
+        .context-title{color:#edfaff;font:700 16px/1.2 Tahoma,Arial,sans-serif;margin-bottom:8px}
+        .context-description{color:#7590a1;font-size:10px;line-height:1.55;margin:0 0 16px}
+        .context-preview{position:relative;min-height:180px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;overflow:hidden;background:linear-gradient(160deg,#101b0d,#050805 70%);border:1px solid #245f1b;box-shadow:inset 0 0 50px #153d5033}
+        .context-preview::after{content:"";position:absolute;inset:10px;border:1px solid #1e526855;pointer-events:none}
+        .context-icon{color:var(--cyan);filter:drop-shadow(0 0 14px #39ff1477)}
+        .context-icon svg{width:66px;height:66px;fill:none;stroke:currentColor;stroke-width:1.2}
+        .context-preview-name{color:#cceaf5;font:700 10px Consolas,monospace;letter-spacing:1px;text-transform:uppercase}
+        .skin-preview{background:radial-gradient(circle at 50% 38%,color-mix(in srgb,var(--skin-accent) 35%,#111a0d),#050805 70%)}
+        .skin-preview-weapon{z-index:1;padding:5px 9px;border:1px solid #245f1b;color:#fff;background:#050805cc;font:700 9px Consolas,monospace;text-transform:uppercase}
+        .context-stats{margin-top:14px;border-top:1px solid #17394b}
+        .context-stat{display:flex;justify-content:space-between;gap:12px;padding:9px 2px;border-bottom:1px solid #102b39;color:#688394;font:9px Consolas,monospace}
+        .context-stat b{color:#d7edf6;font-weight:600}
+        .context-empty{color:#698493;font:10px Consolas,monospace}
+        .world-subheading{margin:16px 0 6px;padding-top:12px;border-top:1px solid #282d37;color:#dde1e9;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase}
+        .note{color:#626976;font-size:10px;line-height:1.5;margin:7px 0 0;padding-top:9px;border-top:1px solid #242933}
+        p{color:#717887;line-height:1.5;font-size:11px}
+
+        .field{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:27px;padding:4px 0;color:#ddd;border-top:1px solid #272727;font-size:10px}
+        .cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:12px}
+
+        input[type=checkbox]{-webkit-appearance:none;appearance:none;width:14px;height:14px;border-radius:0;background:#111;border:1px solid #245f1b;position:relative;cursor:pointer;flex:none;margin:0;outline:none}
+        input[type=checkbox]::after{content:"";position:absolute;inset:3px;background:transparent}
+        input[type=checkbox]:checked{background:#191919;border-color:#39ff14}
+        input[type=checkbox]:checked::after{background:var(--accent);box-shadow:none}
+
+        input[type=range]{-webkit-appearance:none;appearance:none;height:7px;border:1px solid #245f1b;border-radius:0;background:#202020;outline:none;cursor:pointer;margin:0}
+        input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:8px;height:13px;border-radius:0;background:var(--accent);border:1px solid #9cff83;cursor:pointer;box-shadow:none}
+        input[type=range]::-moz-range-thumb{width:10px;height:14px;border-radius:2px;background:#f4f6fa;border:2px solid var(--accent);cursor:pointer}
+
+        select{appearance:none;-webkit-appearance:none;min-width:105px;max-width:190px;height:23px;padding:0 24px 0 7px;border:1px solid #245f1b;border-radius:0;background-color:#111;color:#eee;font:400 10px Tahoma,Arial,sans-serif;outline:none;cursor:pointer;color-scheme:dark;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='m1 1 5 5 5-5' fill='none' stroke='%23d52232' stroke-width='1.6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 7px center}
+        select:hover{border-color:#397d2b;background-color:#12161d}
+        select:focus-visible{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 20%,transparent)}
+        select option{background:#11141a;color:#eceff4}
+        .field>span:first-child{min-width:0;overflow-wrap:anywhere}
+        .field>select,.field>input[type=range]{flex-shrink:0}
+        input[type=number],input[type=search],input[type=text]{background:#111;color:#eee;border:1px solid #245f1b;border-radius:0;outline:none;font:10px Consolas,monospace;padding:0 6px;height:23px}
+        input[type=number]{width:82px;text-align:right}
+        input[type=search]{width:100%;height:34px;margin:4px 0 0}
+        input[type=number]:focus,input[type=search]:focus,input[type=text]:focus{border-color:var(--accent)}
+        input[type=text]{width:210px;max-width:58%}
+        input[type=color]{width:22px;height:18px;padding:1px;border:1px solid #245f1b;border-radius:0;background:#111;cursor:pointer;margin-left:4px}
+
+        .modes{display:inline-flex;margin-top:4px;background:#111;border:1px solid #245f1b;border-radius:0;padding:1px}
+        .mode{background:transparent;border:0;color:#999;padding:5px 11px;border-radius:0;font:400 9px Tahoma,Arial,sans-serif;letter-spacing:0;cursor:pointer}
+        .mode:hover{color:#c8ced8}
+        .mode.selected{background:var(--accent);color:#fff;box-shadow:none}
+
+        .dots{display:flex;gap:9px;align-items:center}
+        .dot{width:15px;height:15px;border-radius:0;border:1px solid #245f1b;padding:0;cursor:pointer;transform:none}
+        .dot.on{outline:1px solid #fff;outline-offset:1px}
+
+        .action{background:#161616;color:#ddd;border:1px solid #245f1b;border-radius:0;padding:5px 10px;margin:7px 5px 0 0;cursor:pointer;font:400 9px Tahoma,Arial,sans-serif;letter-spacing:.2px;text-transform:none}
+        .action:hover{background:#261519;border-color:var(--accent);color:#fff}
+
+        .empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;padding:32px 10px;color:#626976;font-size:11px;text-align:center}
+        .empty svg{width:28px;height:28px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;color:var(--accent)}
+        .empty b{font-weight:650;color:#aeb4c0}
+
+        @media(max-width:960px){#body{grid-template-columns:166px minmax(0,1fr)}#context-panel{display:none}}
+        #rawsclient-mobile-toggle{display:none!important}
+        @media(max-width:680px){
+          #rawsclient-mobile-toggle{display:flex!important}
+          #window{width:calc(100vw - 16px);height:calc(100dvh - 16px);max-width:calc(100vw - 16px);max-height:calc(100dvh - 16px);border-radius:12px}
+          #body{min-height:0}
+          #content{min-height:0;overflow:auto;-webkit-overflow-scrolling:touch}
+          .section{max-width:none;padding:12px}
+          .field{min-height:36px;font-size:12px}
+          input[type=checkbox]{width:19px;height:19px}
+          select,input[type=text],input[type=number]{min-height:34px;font-size:12px}
+          button{touch-action:manipulation}
+
+          #header{height:52px;padding:0}
+          #brand small{display:none}
+          #status span{font-size:0}
+          #status span::after{content:"RSHIFT";font-size:9px}
+          #header{grid-template-columns:145px minmax(0,1fr) 74px}
+          #brand{padding:0 8px}.nav{min-width:42px}
+          .nav{width:auto;height:46px;margin:0;padding:0 10px}
+          .nav span{display:none}
+          #body{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr)}
+          #section-rail{overflow-x:auto;overflow-y:hidden;border-right:0;border-bottom:1px solid var(--line)}
+          .rail-heading{display:none}#section-list{flex-direction:row;min-width:max-content}
+          .section-link{width:auto;min-width:132px;border-bottom:0;border-right:1px solid #173b17}
+          #content{padding:12px 10px 18px}
+          .cols{grid-template-columns:1fr}
+          .field{flex-wrap:wrap}.field input[type=range]{width:min(170px,52vw)!important}
+        }
+
+      </style>
+      <div id="window">
+        <div id="header">
+          <div id="brand">
+            <span class="mark"><img src="https://i.ibb.co/2YnYg7Ps/aasaf.png" alt="RawS Client"></span>
+            <div><strong>RawS Client</strong><small>CLIENT INTERFACE</small></div>
+          </div>
+          <nav id="sidebar" aria-label="Main categories"></nav>
+          <div id="status"><b></b><span>RIGHT SHIFT / MENU</span></div>
+        </div>
+        <div id="body">
+          <aside id="section-rail" aria-label="Sections">
+            <div class="rail-heading">SECTIONS</div>
+            <nav id="section-list"></nav>
+          </aside>
+          <main id="content"></main>
+          <aside id="context-panel" aria-label="Section preview"></aside>
+        </div>
+      </div>
+    `;
+
+    const mobileToggle = elem('button', '');
+    mobileToggle.id = 'rawsclient-mobile-toggle';
+    mobileToggle.type = 'button';
+    mobileToggle.textContent = 'RawS';
+    mobileToggle.setAttribute('aria-label', 'Toggle RawS Client menu');
+    mobileToggle.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:2147483647;pointer-events:auto;display:none;align-items:center;justify-content:center;min-width:58px;height:58px;padding:0 14px;border:1px solid #39ff14;border-radius:50%;background:#050805;color:#39ff14;font:800 12px Tahoma,Arial,sans-serif;letter-spacing:.5px;box-shadow:0 0 18px #39ff1466, inset 0 0 12px #39ff1422;cursor:pointer;touch-action:manipulation';
+    mobileToggle.addEventListener('click', () => openMenu(!uiOpen));
+    root.append(mobileToggle);
+
+    box = root.getElementById('window');
+    nav = root.getElementById('sidebar');
+    page = root.getElementById('content');
+    sectionList = root.getElementById('section-list');
+    contextPanel = root.getElementById('context-panel');
+
+    box.style.setProperty('--accent', UI_ACCENT);
+
+    const bar = root.getElementById('header');
+
+    bar.addEventListener('pointerdown', e => {
+      if (e.button !== 0 || e.target.closest('button,input,select')) return;
+
+      drag = {
+        x: e.clientX,
+        y: e.clientY,
+        left: cfg.x,
+        top: cfg.y
+      };
+
+      bar.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    });
+
+    bar.addEventListener('pointermove', e => {
+      if (!drag) return;
+      cfg.x = drag.left + e.clientX - drag.x;
+      cfg.y = drag.top + e.clientY - drag.y;
+      position();
+    });
+
+    const end = () => {
+      drag = null;
+      save();
+    };
+
+    bar.addEventListener('pointerup', end);
+    bar.addEventListener('pointercancel', end);
+
+    root.addEventListener('wheel', e => e.stopPropagation(), {
+      passive: true
+    });
+
+    renderNav();
+    renderPage();
+    position();
+    initESP();
+
+  }
+
+  window.addEventListener('resize', () => {
+    if (box) {
+      position();
+      save();
+    }
+  });
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initialize, {
+      once: true
+    });
+  } else {
+    initialize();
+  }
+})();
