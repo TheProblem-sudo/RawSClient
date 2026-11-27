@@ -47,9 +47,6 @@
     'knife_m9',
     'knife_huntsman'
   ];
-  const SKIN_GLOVE_MODELS = [
-    'handwrap','motorcycle','slick','specialist','sporty','bloodhound','brokenfang','hydra'
-  ];
   const SKIN_FIREARM_IDS = [
     'glock','usps','p2000','dualies','p250','fiveseven','tec9','cz75','deagle','r8',
     'mac10','mp9','mp7','mp5sd','ump45','p90','bizon','nova','xm1014','sawedoff',
@@ -88,12 +85,11 @@
     fastPlant: false, fastDefuse: false, infiniteMoney: false,
     buyAnywhere: false, buyAnytime: false,
     skinChanger: false, skinCurrentMode: 'native', skinEditorTarget: 'knife',
-    skinKnifeModel: 'native', skinGloveModel: 'native',
+    skinKnifeModel: 'native',
     skinKnifeFinish: 'native', skinKnifeTextureUrl: '',
     skinWeaponFinish: 'native', skinWeaponTextureUrl: '',
     skinPerWeaponTextures: false, skinWeaponProfiles: {},
     skinProfileWeapon: 'awp', skinProfileFinish: 'fade', skinProfileUrl: '',
-    skinBareHands: false,
     gunModifierEnabled: false, gunModifierProfiles: {}, gunEditorWeapon: 'awp',
     gunEditorX: 0, gunEditorY: 0, gunEditorZ: 0,
     gunEditorDamage: 100, gunEditorSpread: 100, gunEditorRecoil: 100,
@@ -151,7 +147,6 @@
     gunEditorWeapon: SKIN_FIREARM_IDS,
     skinCurrentMode: ['native','default'], skinEditorTarget: ['knife','global','profile'],
     skinKnifeModel: ['native','default',...SKIN_KNIFE_MODELS],
-    skinGloveModel: ['native','default',...SKIN_GLOVE_MODELS],
     skinKnifeFinish: ['native','crimson','emerald','sapphire','gold','carbon',
       'fade','neon','ice','obsidian','tiger','damascus','digital','galaxy',
       'toxic','lava','arctic','sunset','ruby','amethyst','cobalt','jade',
@@ -472,7 +467,6 @@
   const skinRecords = new Map();
   let skinAppliedState = null;
   const effectiveKnifeModel=()=>cfg.skinKnifeModel;
-  const effectiveGloveModel=()=>cfg.skinBareHands?'default':cfg.skinGloveModel;
 
   function skinRecord(model) {
     if (!skinRecords.has(model)) skinRecords.set(model, {
@@ -504,10 +498,8 @@
   }
 
   function installSkinChangerHooks(g) {
-    if (g.__amnesisSkinHook || typeof g._povLoadout!=='function' ||
-        typeof g._ownGloves!=='function') return;
+    if (g.__amnesisSkinHook || typeof g._povLoadout!=='function') return;
     const originalPov=g._povLoadout;
-    const originalGloves=g._ownGloves;
     g._povLoadout=function(entity,...args) {
       const base=originalPov.call(this,entity,...args);
       if (!cfg.skinChanger||(entity&&entity!==this.player)||!base) return base;
@@ -526,22 +518,13 @@
       }
       return out;
     };
-    g._ownGloves=function(...args) {
-      const gloveModel=effectiveGloveModel();
-      if (!cfg.skinChanger||gloveModel==='native') {
-        return originalGloves.apply(this,args);
-      }
-      if (gloveModel==='default') return null;
-      return {model:gloveModel,kit:'',item:{wear:0,seed:0}};
-    };
-    g.__amnesisSkinHook={originalPov,originalGloves};
+    g.__amnesisSkinHook={originalPov};
   }
 
   function refreshSkinChanger(g) {
     g._kx7Weapon=null;g._kx7Paint=null;
     const current=g.weapons?.current;
     if (current) g.viewmodel?.setWeapon?.(current);
-    g.syncOwnGloves?.();
     g.hud?.updateWeapon?.();
   }
 
@@ -550,9 +533,8 @@
     const current=g.weapons?.current;
     const state=current?g.weapons?.state?.(current):null;
     const knifeModel=effectiveKnifeModel();
-    const gloveModel=effectiveGloveModel();
     const signature=[cfg.skinChanger,cfg.skinCurrentMode,
-      knifeModel,gloveModel,current].join('|');
+      knifeModel,current].join('|');
     const needsState=cfg.skinChanger&&
       (cfg.skinCurrentMode==='default'||
        (current==='knife'&&SKIN_KNIFE_MODELS.includes(knifeModel)));
@@ -2581,11 +2563,6 @@
         ['native','Native equipped'],['default','Team default'],
         ...SKIN_KNIFE_MODELS.map(id=>[id,titlecase(id.replace(/^knife_/,''))])
       ]);
-      aaSelect(models,'Glove model','skinGloveModel',[
-        ['native','Native equipped'],['default','Team default'],
-        ...SKIN_GLOVE_MODELS.map(id=>[id,titlecase(id)])
-      ]);
-      check(models,'Bare Hands','skinBareHands');
       aaSelect(models,'Native paint mode','skinCurrentMode',[
         ['native','Keep native paint'],['default','Remove native paint']
       ]);
@@ -2652,7 +2629,6 @@
       const resetSkins=elem('button','action','Reset Skin Overrides');
       resetSkins.onclick=()=>{
         cfg.skinCurrentMode='native';cfg.skinKnifeModel='native';
-        cfg.skinGloveModel='native';cfg.skinBareHands=false;
         cfg.skinKnifeFinish='native';cfg.skinKnifeTextureUrl='';
         cfg.skinWeaponFinish='native';cfg.skinWeaponTextureUrl='';
         cfg.skinWeaponProfiles={};cfg.skinPerWeaponTextures=false;
