@@ -1,6 +1,128 @@
-fetch('https://raw.githubusercontent.com/TheProblem-sudo/RawSClient/main/RawSClientMF.txt')
-  .then(r => {
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    return r.text();
-  })
-  .then(eval);
+(() => {
+  'use strict';
+
+  if (window.__rawsClientLoaderUI || window.__rawsClientGUI) return;
+  window.__rawsClientLoaderUI = true;
+
+  const VERSIONS = {
+    previous: {
+      label: 'Prev Version',
+      description: 'RawSClient Mobile Friendly · v3.5.0',
+      url: 'https://raw.githubusercontent.com/TheProblem-sudo/RawSClient/main/RawSClientMF.txt'
+    },
+    newest: {
+      label: 'Newest',
+      description: 'RawSClient · v6.0.0',
+      url: 'https://raw.githubusercontent.com/TheProblem-sudo/ModingTheClient/main/RawSClient.user.js'
+    }
+  };
+
+  function showLoader() {
+    if (!document.documentElement) {
+      document.addEventListener('DOMContentLoaded', showLoader, { once: true });
+      return;
+    }
+
+    const style = document.createElement('style');
+    style.textContent = `
+      #raws-loader-overlay {
+        position: fixed; inset: 0; z-index: 2147483647;
+        display: flex; align-items: center; justify-content: center;
+        padding: 18px; box-sizing: border-box;
+        background: rgba(5, 8, 12, .82); backdrop-filter: blur(9px);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: #f4f7fb;
+      }
+      #raws-loader-panel {
+        width: min(410px, 100%); box-sizing: border-box;
+        padding: 26px; border: 1px solid rgba(57,255,20,.25);
+        border-radius: 18px; background: linear-gradient(155deg,#171d22,#0b0f13 72%);
+        box-shadow: 0 24px 90px rgba(0,0,0,.62), 0 0 34px rgba(57,255,20,.08);
+      }
+      #raws-loader-brand { display:flex; align-items:center; gap:11px; margin-bottom:22px; }
+      #raws-loader-mark {
+        width:39px;height:39px;display:grid;place-items:center;border-radius:12px;
+        color:#071006;background:#39ff14;font-size:21px;font-weight:900;
+        box-shadow:0 0 22px rgba(57,255,20,.24);
+      }
+      #raws-loader-title { margin:0;font-size:21px;line-height:1.2;font-weight:800;letter-spacing:.2px; }
+      #raws-loader-subtitle { margin:5px 0 0;color:#8e9aa4;font-size:12px; }
+      #raws-loader-prompt { margin:0 0 14px;color:#c5cdd3;font-size:13px; }
+      .raws-loader-choice {
+        display:block;width:100%;margin:10px 0;padding:15px 16px;
+        border:1px solid #303b43;border-radius:12px;background:#151c21;
+        color:#f5f7f8;text-align:left;cursor:pointer;transition:.16s ease;
+      }
+      .raws-loader-choice:hover { border-color:#39ff14;background:#1a241d;transform:translateY(-1px); }
+      .raws-loader-choice:disabled { opacity:.55;cursor:wait;transform:none; }
+      .raws-loader-choice strong { display:block;font-size:15px;font-weight:750; }
+      .raws-loader-choice small { display:block;margin-top:5px;color:#89969e;font-size:11px; }
+      #raws-loader-status { min-height:18px;margin:15px 2px 0;color:#9daab2;font-size:12px;line-height:1.5;overflow-wrap:anywhere; }
+      #raws-loader-status.error { color:#ff7777; }
+      #raws-loader-footer { margin-top:17px;padding-top:13px;border-top:1px solid #283139;color:#687680;font-size:10px;text-align:center; }
+    `;
+
+    const overlay = document.createElement('div');
+    overlay.id = 'raws-loader-overlay';
+    overlay.innerHTML = `
+      <section id="raws-loader-panel" role="dialog" aria-modal="true" aria-labelledby="raws-loader-title">
+        <div id="raws-loader-brand">
+          <div id="raws-loader-mark">R</div>
+          <div>
+            <h1 id="raws-loader-title">RawSClient</h1>
+            <p id="raws-loader-subtitle">Select the version you want to launch</p>
+          </div>
+        </div>
+        <p id="raws-loader-prompt">Choose a client version:</p>
+        <button class="raws-loader-choice" data-version="previous" type="button">
+          <strong>Prev Version</strong>
+          <small>RawSClient Mobile Friendly · v3.5.0</small>
+        </button>
+        <button class="raws-loader-choice" data-version="newest" type="button">
+          <strong>Newest</strong>
+          <small>RawSClient · v6.0.0</small>
+        </button>
+        <div id="raws-loader-status" role="status" aria-live="polite">Ready.</div>
+        <div id="raws-loader-footer">RAW S CLIENT · VERSION SELECTOR</div>
+      </section>
+    `;
+
+    document.documentElement.append(style, overlay);
+
+    const status = overlay.querySelector('#raws-loader-status');
+    const buttons = [...overlay.querySelectorAll('[data-version]')];
+
+    async function launch(versionKey) {
+      const version = VERSIONS[versionKey];
+      if (!version) return;
+
+      buttons.forEach(button => { button.disabled = true; });
+      status.classList.remove('error');
+      status.textContent = 'Downloading ' + version.label + '…';
+
+      try {
+        const response = await fetch(version.url, { cache: 'no-store' });
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        const source = await response.text();
+        if (!source.trim()) throw new Error('Downloaded file is empty.');
+
+        status.textContent = 'Starting ' + version.label + '…';
+        (0, eval)(source + '\n//# sourceURL=' + version.url);
+
+        overlay.remove();
+        style.remove();
+        window.__rawsClientLoaderUI = false;
+      } catch (error) {
+        status.classList.add('error');
+        status.textContent = 'Could not load ' + version.label + ': ' + (error?.message || error);
+        buttons.forEach(button => { button.disabled = false; });
+      }
+    }
+
+    buttons.forEach(button => {
+      button.addEventListener('click', () => launch(button.dataset.version));
+    });
+  }
+
+  showLoader();
+})();
