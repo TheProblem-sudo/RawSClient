@@ -2930,9 +2930,8 @@
         .empty b{font-weight:650;color:#aeb4c0}
 
         @media(max-width:960px){#body{grid-template-columns:166px minmax(0,1fr)}#context-panel{display:none}}
-        #rawsclient-mobile-toggle{display:none!important}
+        #rawsclient-mobile-toggle{display:flex!important}
         @media(max-width:680px){
-          #rawsclient-mobile-toggle{display:flex!important}
           #window{width:calc(100vw - 16px);height:calc(100dvh - 16px);max-width:calc(100vw - 16px);max-height:calc(100dvh - 16px);border-radius:12px}
           #body{min-height:0}
           #content{min-height:0;overflow:auto;-webkit-overflow-scrolling:touch}
@@ -2985,7 +2984,7 @@
     mobileToggle.type = 'button';
     mobileToggle.textContent = 'RawS';
     mobileToggle.setAttribute('aria-label', 'Toggle RawS Client menu');
-    mobileToggle.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:2147483647;pointer-events:auto;display:none;align-items:center;justify-content:center;min-width:58px;height:58px;padding:0 14px;border:1px solid #39ff14;border-radius:50%;background:#050805;color:#39ff14;font:800 12px Tahoma,Arial,sans-serif;letter-spacing:.5px;box-shadow:0 0 18px #39ff1466, inset 0 0 12px #39ff1422;cursor:pointer;touch-action:manipulation';
+    mobileToggle.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:2147483647;pointer-events:auto;display:flex;align-items:center;justify-content:center;min-width:58px;height:58px;padding:0 14px;border:1px solid #39ff14;border-radius:50%;background:#050805;color:#39ff14;font:800 12px Tahoma,Arial,sans-serif;letter-spacing:.5px;box-shadow:0 0 18px #39ff1466, inset 0 0 12px #39ff1422;cursor:pointer;touch-action:manipulation';
     mobileToggle.addEventListener('click', () => openMenu(!uiOpen));
     root.append(mobileToggle);
 
