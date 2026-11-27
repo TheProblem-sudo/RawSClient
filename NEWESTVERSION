@@ -2278,6 +2278,15 @@
     parent.append(row);
   }
 
+  function aaNumber(value, min, max, fallback) {
+    const number = Number(value);
+    const fallbackNumber = Number(fallback);
+    const safeNumber = Number.isFinite(number)
+      ? number
+      : (Number.isFinite(fallbackNumber) ? fallbackNumber : min);
+    return Math.max(min, Math.min(max, safeNumber));
+  }
+
   function aaRange(parent, label, key, min, max, step, unit) {
     const row = elem('label', 'field');
     const text = elem('span');
