@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         RawSClient Loader
 // @namespace    https://github.com/TheProblem-sudo/RawSClient
-// @version      1.0.0
-// @description  Choose between the previous and newest RawSClient version.
+// @version      2.0.0
+// @description  Choose device type, then RawSClient version.
 // @match        https://www.clutcher.io/*
 // @match        https://clutcher.io/*
 // @match        file:///*/Clutcher-Offline.html
@@ -12,116 +12,129 @@
 
 (() => {
   'use strict';
-
   const FLAG = '__rawsClientLoaderStarted';
   if (window[FLAG]) return;
   window[FLAG] = true;
 
-  const VERSIONS = {
-    previous: {
-      label: 'Prev Version',
-      version: '3.5.0',
-      url: 'https://raw.githubusercontent.com/TheProblem-sudo/RawSClient/main/PREVVERSION'
+  const BUILDS = {
+    PC: {
+      previous: { label: 'Previous', file: 'PREVVERSION' },
+      newest: { label: 'Newest', file: 'NEWESTVERSION' }
     },
-    newest: {
-      label: 'Newest',
-      version: '6.0.0',
-      url: 'https://raw.githubusercontent.com/TheProblem-sudo/RawSClient/main/NEWESTVERSION'
+    Mobile: {
+      previous: { label: 'Previous Mobile', file: 'PREVVERSIONMOBILE' },
+      newest: { label: 'Newest Mobile', file: 'NEWESTVERSIONMOBILE' }
     }
   };
+  const RAW = 'https://raw.githubusercontent.com/TheProblem-sudo/RawSClient/main/';
 
   function createLoader() {
     if (!document.body || document.getElementById('raws-client-loader-host')) return;
-
     const host = document.createElement('div');
     host.id = 'raws-client-loader-host';
     host.style.cssText = 'all:initial;position:fixed;inset:0;z-index:2147483647;pointer-events:none;';
     document.body.appendChild(host);
-
     const root = host.attachShadow ? host.attachShadow({ mode: 'open' }) : host;
+
     const style = document.createElement('style');
     style.textContent = `
-      * { box-sizing: border-box; }
-      .backdrop { position:fixed; inset:0; display:grid; place-items:center; padding:12px;
-        background:transparent; pointer-events:none; font-family:Arial,Helvetica,sans-serif; color:#f1fff3; }
-      .panel { width:min(390px,calc(100vw - 24px)); padding:12px 14px 10px;
-        border:1px solid rgba(57,255,20,.32); border-radius:11px;
-        background:rgba(9,15,11,.96); box-shadow:0 8px 30px rgba(0,0,0,.38),0 0 18px rgba(57,255,20,.06);
-        pointer-events:auto; }
-      .load-row { display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:7px; }
-      .load-label { color:#dce9de; font-size:12px; font-weight:700; white-space:nowrap; }
-      .choices { display:flex; align-items:center; gap:6px; }
-      button { min-height:30px; padding:6px 11px; border:1px solid #304136; border-radius:7px;
-        background:#151f18; color:#f3fff4; font-size:12px; font-weight:700; cursor:pointer; transition:.15s ease; }
-      button:hover:not(:disabled) { border-color:#39ff14; background:#1b2b1d; }
-      button:focus-visible { outline:2px solid #39ff14; outline-offset:2px; }
-      button:disabled { opacity:.55; cursor:wait; }
-      .status { min-height:15px; margin-top:8px; color:#9caf9f; font-size:11px; line-height:1.35;
-        overflow-wrap:anywhere; text-align:center; }
-      .status.error { color:#ff8585; }
-      .brand { position:fixed; right:9px; bottom:7px; color:rgba(220,235,222,.55);
-        font-size:10px; font-weight:700; letter-spacing:.7px; text-shadow:0 1px 3px #000; pointer-events:none; }
-      @media (max-width:360px) { .panel { padding:10px; } .load-row { gap:5px; } button { padding:6px 8px; } }
+      *{box-sizing:border-box}
+      .backdrop{position:fixed;inset:0;display:grid;place-items:center;padding:12px;background:transparent;pointer-events:none;font-family:Arial,Helvetica,sans-serif;color:#f1fff3}
+      .panel{width:min(390px,calc(100vw - 24px));padding:14px;border:1px solid rgba(57,255,20,.32);border-radius:11px;background:rgba(9,15,11,.96);box-shadow:0 8px 30px rgba(0,0,0,.38);pointer-events:auto}
+      .heading{text-align:center;margin:0 0 11px;color:#eaffeb;font-size:13px;font-weight:700}
+      .choices{display:flex;justify-content:center;flex-wrap:wrap;gap:8px}
+      button{min-height:34px;padding:7px 13px;border:1px solid #304136;border-radius:7px;background:#151f18;color:#f3fff4;font-size:12px;font-weight:700;cursor:pointer}
+      button:hover:not(:disabled){border-color:#39ff14;background:#1b2b1d}
+      button:focus-visible{outline:2px solid #39ff14;outline-offset:2px}
+      button:disabled{opacity:.55;cursor:wait}
+      .back{display:block;margin:10px auto 0;background:transparent;border-color:#26352b;color:#b9c9bc}
+      .status{min-height:15px;margin-top:9px;color:#9caf9f;font-size:11px;line-height:1.35;overflow-wrap:anywhere;text-align:center}
+      .status.error{color:#ff8585}
+      .brand{position:fixed;right:9px;bottom:7px;color:rgba(220,235,222,.55);font-size:10px;font-weight:700;letter-spacing:.7px;text-shadow:0 1px 3px #000;pointer-events:none}
+      @media(max-width:360px){.panel{padding:11px}.choices{gap:6px}button{padding:7px 10px}}
     `;
-
     const backdrop = document.createElement('div');
     backdrop.className = 'backdrop';
     backdrop.innerHTML = `
-      <section class="panel" role="dialog" aria-modal="true" aria-label="RawSClient version loader">
-        <div class="load-row">
-          <span class="load-label">Load Version:</span>
-          <div class="choices">
-            <button type="button" data-version="previous">Previous</button>
-            <button type="button" data-version="newest">Newest</button>
-          </div>
+      <section class="panel" role="dialog" aria-modal="true" aria-label="RawSClient Loader">
+        <h2 class="heading">Choose your device</h2>
+        <div class="choices" data-screen="device">
+          <button type="button" data-device="PC">PC</button>
+          <button type="button" data-device="Mobile">Mobile</button>
         </div>
-        <div class="status" role="status" aria-live="polite">Ready.</div>
+        <div class="choices" data-screen="version" hidden>
+          <button type="button" data-version="previous">Previous</button>
+          <button type="button" data-version="newest">Newest</button>
+        </div>
+        <button type="button" class="back" data-back hidden>← Back</button>
+        <div class="status" role="status" aria-live="polite">Select your device.</div>
       </section>
       <div class="brand">RawSLoader</div>
     `;
-
     root.append(style, backdrop);
+
+    const heading = root.querySelector('.heading');
+    const deviceScreen = root.querySelector('[data-screen="device"]');
+    const versionScreen = root.querySelector('[data-screen="version"]');
+    const back = root.querySelector('[data-back]');
     const status = root.querySelector('.status');
-    const buttons = [...root.querySelectorAll('button[data-version]')];
+    let selectedDevice = null;
+
+    root.querySelectorAll('[data-device]').forEach(button => {
+      button.addEventListener('click', () => {
+        selectedDevice = button.dataset.device;
+        deviceScreen.hidden = true;
+        versionScreen.hidden = false;
+        back.hidden = false;
+        heading.textContent = selectedDevice + ' — choose version';
+        status.classList.remove('error');
+        status.textContent = 'Select Previous or Newest.';
+      });
+    });
+
+    back.addEventListener('click', () => {
+      selectedDevice = null;
+      versionScreen.hidden = true;
+      deviceScreen.hidden = false;
+      back.hidden = true;
+      heading.textContent = 'Choose your device';
+      status.classList.remove('error');
+      status.textContent = 'Select your device.';
+    });
 
     async function loadVersion(key) {
-      const selected = VERSIONS[key];
-      if (!selected || window.__rawsClientLoaded) return;
-
+      if (!selectedDevice || window.__rawsClientLoaded) return;
+      const selected = BUILDS[selectedDevice]?.[key];
+      if (!selected) return;
+      const buttons = [...root.querySelectorAll('button')];
       buttons.forEach(button => { button.disabled = true; });
       status.classList.remove('error');
       status.textContent = 'Downloading ' + selected.label + '…';
-
       try {
-        const response = await fetch(selected.url, { cache: 'no-store' });
+        const response = await fetch(RAW + selected.file, { cache: 'no-store' });
         if (!response.ok) throw new Error('HTTP ' + response.status);
         const source = await response.text();
         if (!source.trim()) throw new Error('The downloaded file is empty.');
-        if (!source.includes('__rawsClientGUI')) {
-          throw new Error('The selected file does not look like a RawSClient build.');
-        }
-
+        if (!source.includes('__rawsClientGUI')) throw new Error('The selected file is not a valid RawSClient build.');
         status.textContent = 'Starting ' + selected.label + '…';
         (0, eval)(source);
-        window.__rawsClientLoaded = key;
+        window.__rawsClientLoaded = selectedDevice.toLowerCase() + '-' + key;
         status.textContent = selected.label + ' loaded successfully.';
         backdrop.style.display = 'none';
       } catch (error) {
         console.error('[RawSClient Loader]', error);
         status.classList.add('error');
-        status.textContent = 'Could not load ' + selected.label + ': ' + (error && error.message ? error.message : String(error));
+        status.textContent = 'Could not load ' + selected.label + ': ' + (error?.message || String(error));
         buttons.forEach(button => { button.disabled = false; });
       }
     }
 
-    buttons.forEach(button => {
+    root.querySelectorAll('[data-version]').forEach(button => {
       button.addEventListener('click', () => loadVersion(button.dataset.version));
     });
   }
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', createLoader, { once: true });
-  } else {
-    createLoader();
-  }
+  } else createLoader();
 })();
