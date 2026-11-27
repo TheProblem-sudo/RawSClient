@@ -42,51 +42,42 @@
     const style = document.createElement('style');
     style.textContent = `
       * { box-sizing: border-box; }
-      .backdrop { position:fixed; inset:0; display:grid; place-items:center; padding:18px;
-        background:rgba(3,7,5,.76); backdrop-filter:blur(8px); pointer-events:auto;
-        font-family:Arial,Helvetica,sans-serif; color:#f1fff3; }
-      .panel { width:min(430px,100%); padding:28px; border:1px solid rgba(57,255,20,.35);
-        border-radius:18px; background:linear-gradient(145deg,#111914,#080d0a);
-        box-shadow:0 20px 80px rgba(0,0,0,.55),0 0 35px rgba(57,255,20,.08); }
-      .eyebrow { color:#39ff14; font-size:11px; font-weight:800; letter-spacing:2.5px; }
-      h1 { margin:9px 0 6px; font-size:25px; letter-spacing:.2px; }
-      .sub { margin:0 0 23px; color:#aab8ad; font-size:13px; line-height:1.5; }
-      .choices { display:grid; gap:11px; }
-      button { width:100%; min-height:64px; display:flex; align-items:center; justify-content:space-between;
-        gap:12px; padding:13px 16px; border:1px solid #304136; border-radius:12px;
-        background:#151f18; color:#f3fff4; text-align:left; cursor:pointer; transition:.18s ease; }
-      button:hover:not(:disabled) { border-color:#39ff14; background:#1b2b1d; transform:translateY(-1px); }
-      button:focus-visible { outline:2px solid #39ff14; outline-offset:3px; }
+      .backdrop { position:fixed; inset:0; display:grid; place-items:center; padding:12px;
+        background:transparent; pointer-events:none; font-family:Arial,Helvetica,sans-serif; color:#f1fff3; }
+      .panel { width:min(390px,calc(100vw - 24px)); padding:12px 14px 10px;
+        border:1px solid rgba(57,255,20,.32); border-radius:11px;
+        background:rgba(9,15,11,.96); box-shadow:0 8px 30px rgba(0,0,0,.38),0 0 18px rgba(57,255,20,.06);
+        pointer-events:auto; }
+      .load-row { display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:7px; }
+      .load-label { color:#dce9de; font-size:12px; font-weight:700; white-space:nowrap; }
+      .choices { display:flex; align-items:center; gap:6px; }
+      button { min-height:30px; padding:6px 11px; border:1px solid #304136; border-radius:7px;
+        background:#151f18; color:#f3fff4; font-size:12px; font-weight:700; cursor:pointer; transition:.15s ease; }
+      button:hover:not(:disabled) { border-color:#39ff14; background:#1b2b1d; }
+      button:focus-visible { outline:2px solid #39ff14; outline-offset:2px; }
       button:disabled { opacity:.55; cursor:wait; }
-      .name { display:block; font-size:15px; font-weight:800; }
-      .version { display:block; margin-top:5px; color:#8da192; font-size:11px; }
-      .arrow { color:#39ff14; font-size:22px; }
-      .status { min-height:18px; margin:17px 1px 0; color:#9caf9f; font-size:12px; line-height:1.5; }
+      .status { min-height:15px; margin-top:8px; color:#9caf9f; font-size:11px; line-height:1.35;
+        overflow-wrap:anywhere; text-align:center; }
       .status.error { color:#ff8585; }
-      .foot { margin-top:17px; color:#65756a; font-size:10px; text-align:center; }
-      @media (max-width:420px) { .panel { padding:22px; } h1 { font-size:22px; } }
+      .brand { position:fixed; right:9px; bottom:7px; color:rgba(220,235,222,.55);
+        font-size:10px; font-weight:700; letter-spacing:.7px; text-shadow:0 1px 3px #000; pointer-events:none; }
+      @media (max-width:360px) { .panel { padding:10px; } .load-row { gap:5px; } button { padding:6px 8px; } }
     `;
 
     const backdrop = document.createElement('div');
     backdrop.className = 'backdrop';
     backdrop.innerHTML = `
-      <section class="panel" role="dialog" aria-modal="true" aria-labelledby="rcl-title">
-        <div class="eyebrow">RAW S CLIENT</div>
-        <h1 id="rcl-title">Choose your version</h1>
-        <p class="sub">Select which RawSClient build you want to load.</p>
-        <div class="choices">
-          <button type="button" data-version="previous">
-            <span><span class="name">Prev Version</span><span class="version">RawSClient v3.5.0</span></span>
-            <span class="arrow" aria-hidden="true">›</span>
-          </button>
-          <button type="button" data-version="newest">
-            <span><span class="name">Newest</span><span class="version">RawSClient v6.0.0</span></span>
-            <span class="arrow" aria-hidden="true">›</span>
-          </button>
+      <section class="panel" role="dialog" aria-modal="true" aria-label="RawSClient version loader">
+        <div class="load-row">
+          <span class="load-label">Load Version:</span>
+          <div class="choices">
+            <button type="button" data-version="previous">Previous</button>
+            <button type="button" data-version="newest">Newest</button>
+          </div>
         </div>
-        <div class="status" role="status" aria-live="polite">Ready. Choose a version to continue.</div>
-        <div class="foot">Downloads directly from the RawSClient GitHub repository</div>
+        <div class="status" role="status" aria-live="polite">Ready.</div>
       </section>
+      <div class="brand">RawSLoader</div>
     `;
 
     root.append(style, backdrop);
