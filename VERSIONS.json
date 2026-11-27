@@ -1,0 +1,14 @@
+{
+  "loaderVersion": "2.1.0",
+  "loaderFile": "Loader",
+  "builds": {
+    "PC": {
+      "previous": { "file": "PREVVERSION", "version": "3.5.0", "build": "PC Previous" },
+      "newest": { "file": "NEWESTVERSION", "version": "6.0.0", "build": "PC Newest" }
+    },
+    "Mobile": {
+      "previous": { "file": "PREVVERSIONMOBILE", "version": "3.5.0-mobile", "build": "Mobile Previous" },
+      "newest": { "file": "NEWESTVERSIONMOBILE", "version": "6.0.0-mobile", "build": "Mobile Newest" }
+    }
+  }
+}
