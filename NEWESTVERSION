@@ -1697,6 +1697,11 @@
   }
 
   function ensureAllHooks() {
+    // Do not patch game/player methods on the lobby or team-selection screen.
+    // Wait until the local player has actually entered an active match.
+    const g = window.game;
+    if (!g || g.state !== 'playing' || !g.player) return;
+
     ensureRageFireHook();
     ensureFireHook();
     ensureGameplayFeatureHooks();
