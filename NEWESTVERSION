@@ -1570,11 +1570,13 @@
       const runUpdate = () => {
         const wasGrounded = !!this.onGround;
         const wasLadder = !!this.onLadder;
-        jumpHeld = keyboardJumpHeld || isJumpActionDown(input);\n        if (cfg.bhopNoStamina && (cfg.autoBhop || cfg.superBhop) && jumpHeld) {
+        jumpHeld = keyboardJumpHeld || isJumpActionDown(input);
+        if (cfg.bhopNoStamina && (cfg.autoBhop || cfg.superBhop) && jumpHeld) {
           this.stamina = 0;
         }
         const result = originalUpdate.call(this, dt, input, ...rest);
-        if (cfg.autoLandingHop && !wasGrounded && this.onGround && !this.onLadder) {
+        if (((cfg.autoBhop && jumpHeld) || cfg.autoLandingHop) &&
+            !wasGrounded && this.onGround && !this.onLadder) {
           this.jumpBuffer = .12;
         }
         applySuperBhopBoost(this, g);
