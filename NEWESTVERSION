@@ -1412,47 +1412,36 @@
 
 
   // =====================================================
-  // AUTO BHOP
+  // AUTO BHOP - KEYBOARD + TOUCH INPUT
   // =====================================================
 
-  // Tracks the real (trusted) Space key, then re-sends a fresh Space keydown
-  // every frame while it's held so a jump registers the moment you land.
-  let spaceHeld = false;
+  let keyboardJumpHeld = false;
+  let jumpHeld = false;
 
   window.addEventListener('keydown', e => {
-    if (e.isTrusted && e.code === 'Space') spaceHeld = true;
+    if (e.isTrusted && e.code === 'Space') keyboardJumpHeld = true;
   }, true);
 
   window.addEventListener('keyup', e => {
-    if (e.isTrusted && e.code === 'Space') spaceHeld = false;
+    if (e.isTrusted && e.code === 'Space') keyboardJumpHeld = false;
   }, true);
 
-  window.addEventListener('blur', () => { spaceHeld = false; });
+  window.addEventListener('blur', () => {
+    keyboardJumpHeld = false;
+    jumpHeld = false;
+  });
 
-  function bhopFrame() {
-    requestAnimationFrame(bhopFrame);
-
-    if (!(cfg.autoBhop || cfg.superBhop) || !spaceHeld || uiOpen) return;
-    if (window.game?.state !== 'playing') return;
-
-    const target = window.game?.renderer?.domElement ||
-      document.querySelector('#game canvas') || document.body;
-    if (!target) return;
-
+  function isJumpActionDown(input) {
     try {
-      target.dispatchEvent(new KeyboardEvent('keydown', {
-        key: ' ', code: 'Space', keyCode: 32, which: 32,
-        repeat: false, bubbles: true, cancelable: true
-      }));
-    } catch (error) {
-      console.warn('[Auto Bhop]', error);
+      return !!(input && typeof input.downA === 'function' &&
+        input.downA('jump'));
+    } catch {
+      return false;
     }
   }
 
-  requestAnimationFrame(bhopFrame);
-
   function applySuperBhopBoost(player, g) {
-    if (!cfg.superBhop || !spaceHeld || uiOpen || g?.state !== 'playing' ||
+    if (!cfg.superBhop || !jumpHeld || uiOpen || g?.state !== 'playing' ||
         !player?.alive || player.onGround || player.onLadder) return;
     const baseSpeed = Number(g.weapons?.maxSpeed?.());
     if (!(baseSpeed > 0)) return;
@@ -1581,7 +1570,7 @@
       const runUpdate = () => {
         const wasGrounded = !!this.onGround;
         const wasLadder = !!this.onLadder;
-        if (cfg.bhopNoStamina && (cfg.autoBhop || cfg.superBhop) && spaceHeld) {
+        jumpHeld = keyboardJumpHeld || isJumpActionDown(input);\n        if (cfg.bhopNoStamina && (cfg.autoBhop || cfg.superBhop) && jumpHeld) {
           this.stamina = 0;
         }
         const result = originalUpdate.call(this, dt, input, ...rest);
@@ -1632,7 +1621,7 @@
         }
       }
 
-      if (mode === 'rage' && g.input?.locked && spaceHeld &&
+      if (mode === 'rage' && jumpHeld &&
           typeof this.accelerate === 'function' &&
           typeof input.downA === 'function') {
         const oldAccelerate = this.accelerate;
@@ -1673,7 +1662,7 @@
         }
       }
 
-      if (mode === 'wasd' && g.input?.locked &&
+      if (mode === 'wasd' &&
           typeof this.accelerate === 'function' &&
           typeof input.downA === 'function') {
         const oldAccelerate = this.accelerate;
