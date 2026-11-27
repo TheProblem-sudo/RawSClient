@@ -255,6 +255,13 @@
       } finally { picker.value = ''; }
     };
     panel.append(exportButton, importButton, picker, message);
+    const unloadButton = elem('button', 'action', 'Unload Library');
+    unloadButton.style.cssText = 'border-color:#a83232;color:#ff7777;margin-top:12px';
+    unloadButton.onclick = () => {
+      if (!confirm('Remove the RawS Client menu from the screen? Active game changes will remain.')) return;
+      document.getElementById('rawsclient-gui-host')?.remove();
+    };
+    panel.append(unloadButton);
   }
 
   const norm = s => String(s || '').toLowerCase().trim().replace(/^weapon_/, '');
