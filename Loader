@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RawSClient Loader
 // @namespace    https://github.com/TheProblem-sudo/RawSClient
-// @version      2.2.0
+// @version      2.3.0
 // @description  Device-first RawSClient loader with update checks.
 // @match        https://www.clutcher.io/*
 // @match        https://clutcher.io/*
@@ -12,7 +12,7 @@
 
 (() => {
   'use strict';
-  const LOADER_VERSION = '2.2.0';
+  const LOADER_VERSION = '2.3.0';
   const RAW = 'https://raw.githubusercontent.com/TheProblem-sudo/RawSClient/main/';
   const MANIFEST_URL = RAW + 'VERSIONS.json';
   const LOADER_URL = RAW + 'Loader';
@@ -70,6 +70,14 @@
       .update strong{display:block;color:#ffdb91;font-size:12px;margin-bottom:4px}
       .update small{display:block;color:#c9b991;font-size:10px;line-height:1.4;margin-bottom:7px}
       .update button{min-height:29px;padding:5px 10px;border-color:#8c6b31;background:#3a2b12;color:#ffe4ad}
+      .changelog-toggle{display:block;margin:10px auto 0;min-height:28px;padding:5px 10px;background:transparent;border-color:#26352b;color:#b9c9bc;font-size:11px}
+      .changelog{margin-top:8px;padding:9px 10px;border:1px solid rgba(57,255,20,.2);border-radius:7px;background:rgba(20,35,23,.55);color:#c8d8ca;font-size:10px;line-height:1.55}
+      .changelog[hidden]{display:none!important}
+      .changelog strong{color:#eaffeb}
+      .progress{height:5px;margin-top:10px;overflow:hidden;border-radius:8px;background:#1c2a20}
+      .progress[hidden]{display:none!important}
+      .progress-fill{height:100%;width:0;border-radius:8px;background:linear-gradient(90deg,#168b13,#69ff45);box-shadow:0 0 10px rgba(57,255,20,.5);transition:width .25s ease}
+      .remembered{border-color:rgba(57,255,20,.7)!important;box-shadow:inset 0 0 0 1px rgba(57,255,20,.13)}
       .status{min-height:15px;margin-top:9px;color:#9caf9f;font-size:11px;line-height:1.35;overflow-wrap:anywhere;text-align:center}
       .status.error{color:#ff8585}
       .brand{position:fixed;right:9px;bottom:7px;color:rgba(220,235,222,.55);font-size:10px;font-weight:700;letter-spacing:.7px;text-shadow:0 1px 3px #000;pointer-events:none}
@@ -94,6 +102,9 @@
           <button type="button" data-version="newest">Newest</button>
         </div>
         <button type="button" class="back" data-back hidden>← Back</button>
+        <button type="button" class="changelog-toggle" data-changelog-toggle>What's New · v2.3.0</button>
+        <div class="changelog" data-changelog hidden><strong>RawSClient Loader 2.3.0</strong><br>• Added remembered device and build selection<br>• Added loading stages and progress indicator<br>• Added SHA-256 integrity verification<br>• Added this changelog panel</div>
+        <div class="progress" data-progress hidden><div class="progress-fill" data-progress-fill></div></div>
         <div class="status" role="status" aria-live="polite">Checking for updates…</div>
       </section>
       <div class="brand">RawSLoader</div>
@@ -105,6 +116,25 @@
     const versionScreen = root.querySelector('[data-screen="version"]');
     const back = root.querySelector('[data-back]');
     const status = root.querySelector('.status');
+    const progress = root.querySelector('[data-progress]');
+    const progressFill = root.querySelector('[data-progress-fill]');
+    const changelogToggle = root.querySelector('[data-changelog-toggle]');
+    const changelog = root.querySelector('[data-changelog]');
+    const STORAGE_KEY = 'rawsclient-loader-preferences-v1';
+    function readPreferences() {
+      try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') || {}; }
+      catch (_) { return {}; }
+    }
+    function savePreferences(patch) {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...readPreferences(), ...patch })); }
+      catch (_) { /* Storage may be disabled; loading still works. */ }
+    }
+    const savedPreferences = readPreferences();
+    if (savedPreferences.device) { const b = root.querySelector('[data-device="' + savedPreferences.device + '"]'); if (b) b.classList.add('remembered'); }
+    if (savedPreferences.version) { const b = root.querySelector('[data-version="' + savedPreferences.version + '"]'); if (b) b.classList.add('remembered'); }
+    if (savedPreferences.device || savedPreferences.version) status.textContent = 'Last used: ' + [savedPreferences.device, savedPreferences.version].filter(Boolean).join(' / ') + '. Choose your device to continue.';
+    changelogToggle.addEventListener('click', () => { changelog.hidden = !changelog.hidden; changelogToggle.textContent = changelog.hidden ? "What's New · v2.3.0" : 'Hide Changelog'; });
+    function setProgress(value, message) { progress.hidden = false; progressFill.style.width = value + '%'; status.textContent = message; }
     const updateBox = root.querySelector('.update');
     const updateText = root.querySelector('.update-text');
     let selectedDevice = null;
@@ -117,6 +147,7 @@
     root.querySelectorAll('[data-device]').forEach(button => {
       button.addEventListener('click', () => {
         selectedDevice = button.dataset.device;
+        savePreferences({ device: selectedDevice });
         deviceScreen.hidden = true;
         versionScreen.hidden = false;
         versionScreen.classList.remove('screen-enter');
@@ -174,22 +205,33 @@
       }
       const buttons = [...root.querySelectorAll('button')];
       buttons.forEach(button => { button.disabled = true; });
+      savePreferences({ device: selectedDevice, version: key });
       status.classList.remove('error');
-      status.textContent = 'Downloading ' + selected.build + ' v' + selected.version + '…';
+      setProgress(12, 'Connecting to RawSClient repository…');
       try {
+        setProgress(24, 'Downloading ' + selected.build + ' v' + selected.version + '…');
         const response = await fetch(RAW + selected.file, { cache: 'no-store' });
-        if (!response.ok) throw new Error('HTTP ' + response.status);
+        if (!response.ok) throw new Error('Download failed: HTTP ' + response.status);
         const source = await response.text();
         if (!source.trim()) throw new Error('The downloaded file is empty.');
+        setProgress(68, 'Verifying SHA-256 integrity…');
+        if (!selected.sha256 || !/^[a-f0-9]{64}$/i.test(selected.sha256)) throw new Error('No valid SHA-256 checksum is available for this build.');
+        if (!window.crypto?.subtle || !window.TextEncoder) throw new Error('This browser does not support secure SHA-256 verification.');
+        const digest = await window.crypto.subtle.digest('SHA-256', new TextEncoder().encode(source));
+        const actualHash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+        if (actualHash.toLowerCase() !== selected.sha256.toLowerCase()) throw new Error('SHA-256 verification failed. The downloaded file may be corrupted or modified.');
         if (!source.includes('__rawsClientGUI')) throw new Error('The selected file is not a valid RawSClient build.');
-        status.textContent = 'Starting ' + selected.build + '…';
+        setProgress(92, 'Integrity verified. Starting ' + selected.build + '…');
         (0, eval)(source);
         window.__rawsClientLoaded = selectedDevice.toLowerCase() + '-' + key;
-        status.textContent = selected.build + ' loaded successfully.';
+        progressFill.style.width = '100%';
+        status.textContent = selected.build + ' loaded successfully. SHA-256 verified.';
         backdrop.style.display = 'none';
       } catch (error) {
         console.error('[RawSClient Loader]', error);
         status.classList.add('error');
+        progress.hidden = true;
+        progressFill.style.width = '0';
         status.textContent = 'Could not load ' + selected.build + ': ' + (error?.message || String(error));
         buttons.forEach(button => { button.disabled = false; });
       }
