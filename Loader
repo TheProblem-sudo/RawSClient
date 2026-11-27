@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         RawSClient Loader
 // @namespace    https://github.com/TheProblem-sudo/RawSClient
-// @version      2.0.0
-// @description  Choose device type, then RawSClient version.
+// @version      2.1.0
+// @description  Device-first RawSClient loader with update checks.
 // @match        https://www.clutcher.io/*
 // @match        https://clutcher.io/*
 // @match        file:///*/Clutcher-Offline.html
@@ -12,21 +12,24 @@
 
 (() => {
   'use strict';
+  const LOADER_VERSION = '2.1.0';
+  const RAW = 'https://raw.githubusercontent.com/TheProblem-sudo/RawSClient/main/';
+  const MANIFEST_URL = RAW + 'VERSIONS.json';
+  const LOADER_URL = RAW + 'Loader';
   const FLAG = '__rawsClientLoaderStarted';
   if (window[FLAG]) return;
   window[FLAG] = true;
 
-  const BUILDS = {
+  const FALLBACK_BUILDS = {
     PC: {
-      previous: { label: 'Previous', file: 'PREVVERSION' },
-      newest: { label: 'Newest', file: 'NEWESTVERSION' }
+      previous: { file: 'PREVVERSION', version: '3.5.0', build: 'PC Previous' },
+      newest: { file: 'NEWESTVERSION', version: '6.0.0', build: 'PC Newest' }
     },
     Mobile: {
-      previous: { label: 'Previous Mobile', file: 'PREVVERSIONMOBILE' },
-      newest: { label: 'Newest Mobile', file: 'NEWESTVERSIONMOBILE' }
+      previous: { file: 'PREVVERSIONMOBILE', version: '3.5.0-mobile', build: 'Mobile Previous' },
+      newest: { file: 'NEWESTVERSIONMOBILE', version: '6.0.0-mobile', build: 'Mobile Newest' }
     }
   };
-  const RAW = 'https://raw.githubusercontent.com/TheProblem-sudo/RawSClient/main/';
 
   function createLoader() {
     if (!document.body || document.getElementById('raws-client-loader-host')) return;
@@ -40,7 +43,7 @@
     style.textContent = `
       *{box-sizing:border-box}
       .backdrop{position:fixed;inset:0;display:grid;place-items:center;padding:12px;background:transparent;pointer-events:none;font-family:Arial,Helvetica,sans-serif;color:#f1fff3}
-      .panel{width:min(390px,calc(100vw - 24px));padding:14px;border:1px solid rgba(57,255,20,.32);border-radius:11px;background:rgba(9,15,11,.96);box-shadow:0 8px 30px rgba(0,0,0,.38);pointer-events:auto}
+      .panel{width:min(390px,calc(100vw - 24px));padding:14px;border:1px solid rgba(57,255,20,.32);border-radius:11px;background:rgba(9,15,11,.97);box-shadow:0 8px 30px rgba(0,0,0,.38);pointer-events:auto}
       .heading{text-align:center;margin:0 0 11px;color:#eaffeb;font-size:13px;font-weight:700}
       .choices{display:flex;justify-content:center;flex-wrap:wrap;gap:8px}
       button{min-height:34px;padding:7px 13px;border:1px solid #304136;border-radius:7px;background:#151f18;color:#f3fff4;font-size:12px;font-weight:700;cursor:pointer}
@@ -48,6 +51,10 @@
       button:focus-visible{outline:2px solid #39ff14;outline-offset:2px}
       button:disabled{opacity:.55;cursor:wait}
       .back{display:block;margin:10px auto 0;background:transparent;border-color:#26352b;color:#b9c9bc}
+      .update{display:none;margin:0 0 10px;padding:9px;border:1px solid rgba(255,190,70,.4);border-radius:8px;background:rgba(100,67,15,.2);text-align:center}
+      .update strong{display:block;color:#ffdb91;font-size:12px;margin-bottom:4px}
+      .update small{display:block;color:#c9b991;font-size:10px;line-height:1.4;margin-bottom:7px}
+      .update button{min-height:29px;padding:5px 10px;border-color:#8c6b31;background:#3a2b12;color:#ffe4ad}
       .status{min-height:15px;margin-top:9px;color:#9caf9f;font-size:11px;line-height:1.35;overflow-wrap:anywhere;text-align:center}
       .status.error{color:#ff8585}
       .brand{position:fixed;right:9px;bottom:7px;color:rgba(220,235,222,.55);font-size:10px;font-weight:700;letter-spacing:.7px;text-shadow:0 1px 3px #000;pointer-events:none}
@@ -58,6 +65,11 @@
     backdrop.innerHTML = `
       <section class="panel" role="dialog" aria-modal="true" aria-label="RawSClient Loader">
         <h2 class="heading">Choose your device</h2>
+        <div class="update" aria-live="polite">
+          <strong>Loader update available!</strong>
+          <small class="update-text"></small>
+          <button type="button" data-update>Install Loader Update</button>
+        </div>
         <div class="choices" data-screen="device">
           <button type="button" data-device="PC">PC</button>
           <button type="button" data-device="Mobile">Mobile</button>
@@ -67,7 +79,7 @@
           <button type="button" data-version="newest">Newest</button>
         </div>
         <button type="button" class="back" data-back hidden>← Back</button>
-        <div class="status" role="status" aria-live="polite">Select your device.</div>
+        <div class="status" role="status" aria-live="polite">Checking for updates…</div>
       </section>
       <div class="brand">RawSLoader</div>
     `;
@@ -78,7 +90,14 @@
     const versionScreen = root.querySelector('[data-screen="version"]');
     const back = root.querySelector('[data-back]');
     const status = root.querySelector('.status');
+    const updateBox = root.querySelector('.update');
+    const updateText = root.querySelector('.update-text');
     let selectedDevice = null;
+    let builds = FALLBACK_BUILDS;
+
+    root.querySelector('[data-update]').addEventListener('click', () => {
+      window.open(LOADER_URL, '_blank', 'noopener');
+    });
 
     root.querySelectorAll('[data-device]').forEach(button => {
       button.addEventListener('click', () => {
@@ -102,29 +121,53 @@
       status.textContent = 'Select your device.';
     });
 
+    async function checkUpdates() {
+      try {
+        const response = await fetch(MANIFEST_URL, { cache: 'no-store' });
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        const manifest = await response.json();
+        if (!manifest || !manifest.builds || !manifest.loaderVersion) throw new Error('Invalid version manifest.');
+        builds = manifest.builds;
+        if (manifest.loaderVersion !== LOADER_VERSION) {
+          updateText.textContent = 'Installed: ' + LOADER_VERSION + ' • Latest: ' + manifest.loaderVersion;
+          updateBox.style.display = 'block';
+          status.textContent = 'A newer Loader is available. You can update or continue.';
+        } else {
+          status.textContent = 'Loader is up to date (v' + LOADER_VERSION + ').';
+        }
+      } catch (error) {
+        console.warn('[RawSClient Loader] Update check failed:', error);
+        status.textContent = 'Could not check updates. You can still load a build.';
+      }
+    }
+
     async function loadVersion(key) {
       if (!selectedDevice || window.__rawsClientLoaded) return;
-      const selected = BUILDS[selectedDevice]?.[key];
-      if (!selected) return;
+      const selected = builds[selectedDevice]?.[key];
+      if (!selected?.file) {
+        status.classList.add('error');
+        status.textContent = 'This build is missing from the version list.';
+        return;
+      }
       const buttons = [...root.querySelectorAll('button')];
       buttons.forEach(button => { button.disabled = true; });
       status.classList.remove('error');
-      status.textContent = 'Downloading ' + selected.label + '…';
+      status.textContent = 'Downloading ' + selected.build + ' v' + selected.version + '…';
       try {
         const response = await fetch(RAW + selected.file, { cache: 'no-store' });
         if (!response.ok) throw new Error('HTTP ' + response.status);
         const source = await response.text();
         if (!source.trim()) throw new Error('The downloaded file is empty.');
         if (!source.includes('__rawsClientGUI')) throw new Error('The selected file is not a valid RawSClient build.');
-        status.textContent = 'Starting ' + selected.label + '…';
+        status.textContent = 'Starting ' + selected.build + '…';
         (0, eval)(source);
         window.__rawsClientLoaded = selectedDevice.toLowerCase() + '-' + key;
-        status.textContent = selected.label + ' loaded successfully.';
+        status.textContent = selected.build + ' loaded successfully.';
         backdrop.style.display = 'none';
       } catch (error) {
         console.error('[RawSClient Loader]', error);
         status.classList.add('error');
-        status.textContent = 'Could not load ' + selected.label + ': ' + (error?.message || String(error));
+        status.textContent = 'Could not load ' + selected.build + ': ' + (error?.message || String(error));
         buttons.forEach(button => { button.disabled = false; });
       }
     }
@@ -132,6 +175,7 @@
     root.querySelectorAll('[data-version]').forEach(button => {
       button.addEventListener('click', () => loadVersion(button.dataset.version));
     });
+    checkUpdates();
   }
 
   if (document.readyState === 'loading') {
