@@ -468,7 +468,7 @@
   // =====================================================
   // INTERFEJS UŻYTKOWNIKA (UI)
   // =====================================================
-  const tabs = ['Skins', 'Performance', 'Silent Aim', 'Danger'];
+  const tabs = ['Skins', 'Performance', 'Silent Aim', 'Settings'];
   const skinSubTabs = [
     { id: 'Models', label: 'Knife Models' },
     { id: 'Textures', label: 'Knife Wraps' },
@@ -544,16 +544,14 @@
       check(s, 'Włącz Silent Aim', 'silentAim');
       check(s, 'Pokaż okrąg FOV', 'silentCircle');
       rangeField(s, 'Promień FOV', 'silentFov', 20, 500, 5, ' px');
-    } else if (cfg.tab === 'Danger') {
-      const d = section('Danger Zone', 'Opcje awaryjne zarządzania skryptem.');
-      const warning = elem('p', 'desc', 'Kliknięcie poniższego przycisku natychmiast wyłącza skrypt, usuwa menu oraz zatrzymuje procesy w tle.');
-      warning.style.color = '#ff3b4a';
-      warning.style.fontSize = '10px';
-      
-      const unloadBtn = elem('button', 'danger-btn', 'UNLOAD SCRIPT');
+    } else if (cfg.tab === 'Settings') {
+      const d = section('Library', 'Menu management.');
+      const warning = elem('p', 'desc', 'Removes the RawS Client menu from the screen. Active game changes and background features are not reset.');
+      const unloadBtn = elem('button', 'danger-btn', 'UNLOAD LIBRARY');
       unloadBtn.onclick = () => {
+        isUnloaded = true;
         openMenu(false);
-        unloadScript();
+        document.getElementById('raws-client-host')?.remove();
       };
       d.append(warning, unloadBtn);
     } else if (cfg.tab === 'Skins') {
