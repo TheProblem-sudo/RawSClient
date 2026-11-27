@@ -40,10 +40,12 @@
 
   const KEY = 'clutcher.darkgui.heldskin.v1';
   const SKIN_KNIFE_MODELS = [
-    'knife_bayonet','knife_bowie','knife_butterfly','knife_canis','knife_cord',
-    'knife_css','knife_falchion','knife_flip','knife_gut','knife_karambit',
-    'knife_kukri','knife_m9','knife_navaja','knife_nomad','knife_push',
-    'knife_skeleton','knife_stiletto','knife_huntsman','knife_talon','knife_ursus'
+    'knife_butterfly',
+    'knife_flip',
+    'knife_gut',
+    'knife_karambit',
+    'knife_m9',
+    'knife_huntsman'
   ];
   const SKIN_GLOVE_MODELS = [
     'handwrap','motorcycle','slick','specialist','sporty','bloodhound','brokenfang','hydra'
