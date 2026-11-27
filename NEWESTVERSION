@@ -2249,7 +2249,7 @@
     };
 
     row.append(input);
-    parent.append(row);    parent.append(row);
+    parent.append(row);
   }
 
   function aaSelect(parent, label, key, options, rerender = false) {
@@ -2338,7 +2338,7 @@
 
   function renderPage() {
     page.replaceChildren();
-    pageBody = elem('div', 'panel-grid');
+    pageBody = elem('div', 'panel-grid' + (cfg.tab === 'Skins' ? ' skin-page' : ''));
     page.append(elem('h2', '', cfg.tab), pageBody);
 
     if (cfg.tab === 'Rage') {
@@ -2836,6 +2836,7 @@
         .panel-grid{display:block;column-count:initial}
         .panel-grid>.section{display:none}
         .panel-grid>.section.is-active-section{display:block}
+        .panel-grid.skin-page>.section{display:block!important}
 
         ::-webkit-scrollbar{width:6px;height:6px}
         ::-webkit-scrollbar-thumb{background:#19506a;border-radius:0}
