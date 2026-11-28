@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RawSClient Loader
 // @namespace    https://github.com/TheProblem-sudo/RawSClient
-// @version      2.3.0
+// @version      2.3.1
 // @description  Device-first RawSClient loader with update checks.
 // @match        https://www.clutcher.io/*
 // @match        https://clutcher.io/*
@@ -12,7 +12,7 @@
 
 (() => {
   'use strict';
-  const LOADER_VERSION = '2.3.0';
+  const LOADER_VERSION = '2.3.1';
   const RAW = 'https://raw.githubusercontent.com/TheProblem-sudo/RawSClient/main/';
   const MANIFEST_URL = RAW + 'VERSIONS.json';
   const LOADER_URL = RAW + 'Loader';
@@ -102,8 +102,8 @@
           <button type="button" data-version="newest">Newest</button>
         </div>
         <button type="button" class="back" data-back hidden>← Back</button>
-        <button type="button" class="changelog-toggle" data-changelog-toggle>What's New · v2.3.0</button>
-        <div class="changelog" data-changelog hidden><strong>RawSClient Loader 2.3.0</strong><br>• Added remembered device and build selection<br>• Added loading stages and progress indicator<br>• Added SHA-256 integrity verification<br>• Added this changelog panel</div>
+        <button type="button" class="changelog-toggle" data-changelog-toggle>What's New · v2.3.1</button>
+        <div class="changelog" data-changelog hidden><strong>RawSClient Loader 2.3.1</strong><br>• Added remembered device and build selection<br>• Added loading stages and progress indicator<br>• Added SHA-256 integrity verification<br>• Added this changelog panel</div>
         <div class="progress" data-progress hidden><div class="progress-fill" data-progress-fill></div></div>
         <div class="status" role="status" aria-live="polite">Checking for updates…</div>
       </section>
@@ -133,7 +133,7 @@
     if (savedPreferences.device) { const b = root.querySelector('[data-device="' + savedPreferences.device + '"]'); if (b) b.classList.add('remembered'); }
     if (savedPreferences.version) { const b = root.querySelector('[data-version="' + savedPreferences.version + '"]'); if (b) b.classList.add('remembered'); }
     if (savedPreferences.device || savedPreferences.version) status.textContent = 'Last used: ' + [savedPreferences.device, savedPreferences.version].filter(Boolean).join(' / ') + '. Choose your device to continue.';
-    changelogToggle.addEventListener('click', () => { changelog.hidden = !changelog.hidden; changelogToggle.textContent = changelog.hidden ? "What's New · v2.3.0" : 'Hide Changelog'; });
+    changelogToggle.addEventListener('click', () => { changelog.hidden = !changelog.hidden; changelogToggle.textContent = changelog.hidden ? "What's New · v2.3.1" : 'Hide Changelog'; });
     function setProgress(value, message) { progress.hidden = false; progressFill.style.width = value + '%'; status.textContent = message; }
     const updateBox = root.querySelector('.update');
     const updateText = root.querySelector('.update-text');
