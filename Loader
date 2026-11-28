@@ -78,6 +78,8 @@
       .progress[hidden]{display:none!important}
       .progress-fill{height:100%;width:0;border-radius:8px;background:linear-gradient(90deg,#168b13,#69ff45);box-shadow:0 0 10px rgba(57,255,20,.5);transition:width .25s ease}
       .remembered{border-color:rgba(57,255,20,.7)!important;box-shadow:inset 0 0 0 1px rgba(57,255,20,.13)}
+      .pc-note{margin:0 0 10px;padding:8px 10px;border:1px solid rgba(57,255,20,.35);border-radius:7px;background:rgba(20,35,23,.55);color:#caffc2;font-size:11px;font-weight:700;text-align:center;letter-spacing:.2px}
+      .pc-note[hidden]{display:none!important}
       .status{min-height:15px;margin-top:9px;color:#9caf9f;font-size:11px;line-height:1.35;overflow-wrap:anywhere;text-align:center}
       .status.error{color:#ff8585}
       .brand{position:fixed;right:9px;bottom:7px;color:rgba(220,235,222,.55);font-size:10px;font-weight:700;letter-spacing:.7px;text-shadow:0 1px 3px #000;pointer-events:none}
@@ -97,6 +99,7 @@
           <button type="button" data-device="PC">PC</button>
           <button type="button" data-device="Mobile">Mobile</button>
         </div>
+        <div class="pc-note" data-pc-note hidden>To Open GUI Press Right Shift!</div>
         <div class="choices" data-screen="version" hidden>
           <button type="button" data-version="previous">Previous</button>
           <button type="button" data-version="newest">Newest</button>
@@ -115,6 +118,7 @@
     const deviceScreen = root.querySelector('[data-screen="device"]');
     const versionScreen = root.querySelector('[data-screen="version"]');
     const back = root.querySelector('[data-back]');
+    const pcNote = root.querySelector('[data-pc-note]');
     const status = root.querySelector('.status');
     const progress = root.querySelector('[data-progress]');
     const progressFill = root.querySelector('[data-progress-fill]');
@@ -148,6 +152,7 @@
       button.addEventListener('click', () => {
         selectedDevice = button.dataset.device;
         savePreferences({ device: selectedDevice });
+        pcNote.hidden = selectedDevice !== 'PC';
         deviceScreen.hidden = true;
         versionScreen.hidden = false;
         versionScreen.classList.remove('screen-enter');
@@ -163,6 +168,7 @@
 
     back.addEventListener('click', () => {
       selectedDevice = null;
+      pcNote.hidden = true;
       versionScreen.hidden = true;
       deviceScreen.hidden = false;
       deviceScreen.classList.remove('screen-enter');
