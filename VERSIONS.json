@@ -1,5 +1,5 @@
 {
-  "loaderVersion": "2.3.0",
+  "loaderVersion": "2.3.1",
   "loaderFile": "Loader",
   "builds": {
     "PC": {
@@ -32,6 +32,13 @@
     }
   },
   "changelog": [
+    {
+      "version": "2.3.1",
+      "date": "2026-11-28",
+      "changes": [
+        "Test release: Loader version update verification"
+      ]
+    },
     {
       "version": "2.3.0",
       "date": "2026-11-28",
