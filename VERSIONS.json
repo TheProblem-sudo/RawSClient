@@ -7,13 +7,13 @@
         "file": "PREVVERSION",
         "version": "3.5.0",
         "build": "PC Previous",
-        "sha256": "14876559741e9228320b64e69408085d43dd4f6fcc49862e3335a8860ff517d6"
+        "sha256": "52b7c8bbb397f80dcff777171dca5fc01ef2063c03ae9c9d201ddfcbdaf68875"
       },
       "newest": {
         "file": "NEWESTVERSION",
         "version": "6.0.0",
         "build": "PC Newest",
-        "sha256": "6fbcd56b5cbf49026807f86fb8eb7c9fbea6c4ed2396865d438a07a3cc2374e4"
+        "sha256": "c03049420e0eb9290708666ff6bd17403140b5abfa4fdd9fda458de2fc72e585"
       }
     },
     "Mobile": {
@@ -21,13 +21,13 @@
         "file": "PREVVERSIONMOBILE",
         "version": "3.5.0-mobile",
         "build": "Mobile Previous",
-        "sha256": "9bc85ee9644f51fd84ea553b1ea1d6df91f45821f8e9f241451340fc53925e6a"
+        "sha256": "b180142f144d9e0ba8d0ce7f0a888e768f00e3464620c42bde02fae935e6c20e"
       },
       "newest": {
         "file": "NEWESTVERSIONMOBILE",
         "version": "6.0.0-mobile",
         "build": "Mobile Newest",
-        "sha256": "c5fb2e59dc9f77ba68b724c1a0f97bb470706f2dca8bf48e5c922b48360e93af"
+        "sha256": "2f5327755a47701dceb023292d221243e815418e031bb92ad520f20b3e476bd3"
       }
     }
   },
