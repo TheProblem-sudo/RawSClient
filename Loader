@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RawSClient Loader
 // @namespace    https://github.com/TheProblem-sudo/RawSClient
-// @version      2.3.1
+// @version      2.3.2
 // @description  Device-first RawSClient loader with update checks.
 // @match        https://www.clutcher.io/*
 // @match        https://clutcher.io/*
@@ -12,7 +12,7 @@
 
 (() => {
   'use strict';
-  const LOADER_VERSION = '2.3.1';
+  const LOADER_VERSION = '2.3.2';
   const RAW = 'https://raw.githubusercontent.com/TheProblem-sudo/RawSClient/main/';
   const MANIFEST_URL = RAW + 'VERSIONS.json';
   const LOADER_URL = RAW + 'Loader';
