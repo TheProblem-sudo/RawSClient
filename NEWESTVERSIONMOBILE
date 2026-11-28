@@ -2755,6 +2755,13 @@
   }
 
   function position() {
+    if (matchMedia('(max-width: 680px)').matches) {
+      cfg.x = 8;
+      cfg.y = 8;
+      box.style.left = '8px';
+      box.style.top = '8px';
+      return;
+    }
     const width = Math.min(1180, innerWidth - 20);
     const height = Math.min(680, innerHeight - 20);
 
@@ -2972,7 +2979,32 @@
         @media(max-width:960px){#body{grid-template-columns:166px minmax(0,1fr)}#context-panel{display:none}}
         #rawsclient-mobile-toggle{display:flex!important}
         @media(max-width:680px){
-          #window{width:calc(100vw - 16px);height:calc(100dvh - 16px);max-width:calc(100vw - 16px);max-height:calc(100dvh - 16px);border-radius:12px}
+          #window{position:fixed!important;left:8px!important;top:8px!important;width:calc(100vw - 16px)!important;height:calc(100dvh - 16px)!important;max-width:none;max-height:none;border-radius:12px;padding-bottom:env(safe-area-inset-bottom)}
+          #window{overflow:hidden}
+          #header{grid-template-columns:minmax(0,1fr) 70px;grid-template-rows:50px 48px;height:auto;min-height:0;cursor:default}
+          #brand{grid-column:1;grid-row:1;padding:0 10px}
+          #sidebar{grid-column:1/-1;grid-row:2;height:48px;min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;border-top:1px solid #173b17}
+          #sidebar::-webkit-scrollbar{display:none}
+          #status{grid-column:2;grid-row:1;border-left:1px solid #17384a}
+          #body{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr);min-height:0}
+          #section-rail{overflow-x:auto;overflow-y:hidden;border-right:0;border-bottom:1px solid var(--line);overscroll-behavior-x:contain}
+          #section-list{flex-direction:row;min-width:max-content}
+          .section-link{min-width:118px;min-height:48px;padding-right:10px;gap:8px}
+          #content{padding:12px 10px calc(22px + env(safe-area-inset-bottom));overscroll-behavior:contain}
+          .section{padding:14px 12px;border-radius:8px}
+          .field{min-height:46px;gap:10px;font-size:13px;padding:7px 0}
+          input[type=checkbox]{width:22px;height:22px}
+          input[type=range]{height:26px;min-width:120px}
+          select,input[type=text],input[type=number]{min-height:42px;font-size:13px;padding:0 9px}
+          .action{min-height:42px;padding:10px 13px;font-size:11px;margin:8px 6px 0 0}
+          .mode{min-height:38px;padding:9px 13px;font-size:11px}
+          .dot{width:22px;height:22px}
+          input[type=search]{height:42px;font-size:13px}
+          .context-panel{display:none}
+          button{touch-action:manipulation}
+          #rawsclient-mobile-toggle{right:calc(14px + env(safe-area-inset-right))!important;bottom:calc(14px + env(safe-area-inset-bottom))!important;min-width:62px!important;height:62px!important}
+          #window.open~#rawsclient-mobile-toggle{opacity:.9}
+          
           #body{min-height:0}
           #content{min-height:0;overflow:auto;-webkit-overflow-scrolling:touch}
           .section{max-width:none;padding:12px}
@@ -3039,6 +3071,7 @@
     const bar = root.getElementById('header');
 
     bar.addEventListener('pointerdown', e => {
+      if (matchMedia('(max-width: 680px)').matches) return;
       if (e.button !== 0 || e.target.closest('button,input,select')) return;
 
       drag = {
