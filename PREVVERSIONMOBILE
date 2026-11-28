@@ -690,6 +690,13 @@
   }
 
   function position() {
+    if (window.matchMedia('(max-width: 680px)').matches) {
+      cfg.x = 8;
+      cfg.y = 8;
+      box.style.left = '8px';
+      box.style.top = '8px';
+      return;
+    }
     const width = Math.min(800, window.innerWidth - 20);
     const height = Math.min(520, window.innerHeight - 20);
     cfg.x = Math.max(10, Math.min(cfg.x ?? (window.innerWidth - width) / 2, window.innerWidth - width - 10));
@@ -801,6 +808,40 @@
 
         .danger-btn{background:#8b2731;color:#fff;border:1px solid #ff3b4a;padding:10px 20px;font-weight:bold;cursor:pointer;width:100%;margin-top:10px;font-size:11px;letter-spacing:1px}
         .danger-btn:hover{background:#ff3b4a}
+
+        @media(max-width:680px){
+          #window{position:fixed!important;left:8px!important;top:8px!important;width:calc(100vw - 16px)!important;height:calc(100dvh - 16px)!important;max-width:none;max-height:none;border-radius:12px;padding-bottom:env(safe-area-inset-bottom)}
+          #header{height:auto;min-height:0;grid-template-columns:minmax(0,1fr) 64px;grid-template-rows:48px 48px;cursor:default}
+          #brand{grid-column:1;grid-row:1;padding:0 12px}
+          #sidebar{grid-column:1/-1;grid-row:2;min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;border-top:1px solid #292929}
+          #sidebar::-webkit-scrollbar{display:none}
+          #status{grid-column:2;grid-row:1;font-size:10px!important;border-left:1px solid #333}
+          .nav{flex:1 0 auto;min-width:86px;min-height:48px;padding:0 12px;font-size:12px;white-space:nowrap;touch-action:pan-x}
+          #content{min-height:0;padding:12px 10px 20px;overflow:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+          .panel-grid{grid-template-columns:minmax(0,1fr);gap:10px}
+          .section{padding:13px;margin-bottom:10px;border-radius:8px}
+          .section-title{font-size:13px}
+          .desc{font-size:11px;line-height:1.45}
+          .field{min-height:44px;gap:10px;font-size:12px;padding:7px 0}
+          input[type=checkbox]{width:22px;height:22px;flex:none}
+          input[type=range]{height:24px;min-width:120px;max-width:52vw}
+          select,input[type=text],input[type=number]{min-height:40px;max-width:58%;font-size:13px;padding:0 9px}
+          .sub-nav{gap:8px}
+          .sub-btn,.tile{min-height:42px;padding:10px 12px;font-size:12px;touch-action:manipulation}
+          .grid-container{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;max-height:none;overflow:visible}
+          .guns-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+          .gun-tile{min-height:58px;padding:10px 7px!important;font-size:11px!important}
+          .danger-btn{min-height:46px;font-size:12px;border-radius:6px;touch-action:manipulation}
+          button{touch-action:manipulation}
+        }
+        @media(max-width:380px){
+          #brand strong{font-size:12px;letter-spacing:.5px}
+          .nav{min-width:76px;padding:0 9px;font-size:11px}
+          .grid-container,.guns-grid{grid-template-columns:1fr!important}
+          .field{align-items:flex-start;flex-direction:column}
+          .field input[type=range],.field select{width:100%;max-width:none}
+        }
+        @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important}}
       </style>
 
       <!-- Pływający przycisk na telefon -->
@@ -861,6 +902,7 @@
     // Przesuwanie głównego okna menu za nagłówek
     const bar = root.getElementById('header');
     bar.addEventListener('pointerdown', e => {
+      if (window.matchMedia('(max-width: 680px)').matches) return;
       if (e.button !== 0 || e.target.closest('button,input,select')) return;
       drag = { x: e.clientX, y: e.clientY, left: cfg.x, top: cfg.y };
       bar.setPointerCapture(e.pointerId);
