@@ -741,33 +741,6 @@
         *,*::before,*::after{box-sizing:border-box}
         :host{font:12px Tahoma,sans-serif;color:#dedede}
         
-        /* Mobilny przycisk RSC */
-        #mobile-btn {
-          position: fixed;
-          width: 50px;
-          height: 50px;
-          background: rgba(23, 23, 23, 0.85);
-          border: 2px solid var(--accent, #ff3b4a);
-          border-radius: 12px;
-          color: #fff;
-          font-weight: bold;
-          font-size: 13px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          cursor: pointer;
-          pointer-events: auto;
-          box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-          user-select: none;
-          touch-action: none;
-          z-index: 2147483647;
-          letter-spacing: 0.5px;
-        }
-        #mobile-btn:active {
-          transform: scale(0.92);
-          background: var(--accent, #ff3b4a);
-        }
-
         #window{position:fixed;width:800px;height:520px;max-width:96vw;max-height:90vh;display:none;overflow:hidden;pointer-events:auto;--accent:#ff3b4a;background:#111;border:1px solid var(--accent);box-shadow:0 18px 55px #000c; border-radius: 8px;}
         #window.open{display:flex;flex-direction:column}
         #header{height:40px;display:grid;grid-template-columns:140px minmax(0,1fr) 90px;align-items:stretch;background:#171717;border-bottom:1px solid var(--accent);cursor:grab;user-select:none}
@@ -803,9 +776,6 @@
         .danger-btn:hover{background:#ff3b4a}
       </style>
 
-      <!-- Pływający przycisk na telefon -->
-      <div id="mobile-btn">RSC</div>
-
       <div id="window">
         <div id="header">
           <div id="brand"><strong>RawS Client</strong></div>
@@ -820,43 +790,6 @@
     nav = root.getElementById('sidebar');
     page = root.getElementById('content');
     box.style.setProperty('--accent', cfg.accent);
-
-    // Logika przeciągania i klikania przycisku mobilnego RSC
-    const mobileBtn = root.getElementById('mobile-btn');
-    mobileBtn.style.left = `${cfg.mobileBtnX}px`;
-    mobileBtn.style.top = `${cfg.mobileBtnY}px`;
-
-    let isDraggingMobile = false;
-    let startX, startY;
-
-    mobileBtn.addEventListener('pointerdown', e => {
-      isDraggingMobile = false;
-      startX = e.clientX;
-      startY = e.clientY;
-      mobileBtn.setPointerCapture(e.pointerId);
-    });
-
-    mobileBtn.addEventListener('pointermove', e => {
-      if (Math.abs(e.clientX - startX) > 5 || Math.abs(e.clientY - startY) > 5) {
-        isDraggingMobile = true;
-      }
-      if (isDraggingMobile) {
-        cfg.mobileBtnX = Math.max(10, Math.min(window.innerWidth - 60, e.clientX - 25));
-        cfg.mobileBtnY = Math.max(10, Math.min(window.innerHeight - 60, e.clientY - 25));
-        mobileBtn.style.left = `${cfg.mobileBtnX}px`;
-        mobileBtn.style.top = `${cfg.mobileBtnY}px`;
-      }
-    });
-
-    mobileBtn.addEventListener('pointerup', e => {
-      mobileBtn.releasePointerCapture(e.pointerId);
-      if (!isDraggingMobile) {
-        // Kliknięcie (bez przesuwania) otwiera/zamyka menu
-        openMenu(!uiOpen);
-      } else {
-        save();
-      }
-    });
 
     // Przesuwanie głównego okna menu za nagłówek
     const bar = root.getElementById('header');
