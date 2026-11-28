@@ -1,5 +1,5 @@
 {
-  "loaderVersion": "2.3.1",
+  "loaderVersion": "2.3.2",
   "loaderFile": "Loader",
   "builds": {
     "PC": {
@@ -32,6 +32,14 @@
     }
   },
   "changelog": [
+    {
+      "version": "2.3.2",
+      "date": "2026-11-28",
+      "changes": [
+        "Added the Right Shift GUI instruction when PC is selected",
+        "Removed the floating menu button from PC builds"
+      ]
+    },
     {
       "version": "2.3.1",
       "date": "2026-11-28",
